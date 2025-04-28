@@ -595,7 +595,7 @@ classdef exmiras < thermo
             obj.nSteps = obj.nSteps + 1;
         end
 
-        function obj = evap(obj)
+        function obj = exmiras(obj)
 
             % calculate dropsize distribution
             obj.De = logspace(log10(0.1),log10(obj.dMax),obj.nBins+1);

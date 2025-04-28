@@ -1,13 +1,6 @@
-# Copyright (c) 2015,2018,2019 MetPy Developers.
-# Distributed under the terms of the BSD 3-Clause License.
-# SPDX-License-Identifier: BSD-3-Clause
-"""
-===================
-NEXRAD Level 2 File
-===================
-
-Use MetPy to read information from a NEXRAD Level 2 (volume) file and plot
-"""
+# KOKC case study
+# this script reads in the RADAR data from KTLX and extracts the reflectivity and ZDR profiles
+# and writes them to a netcdf file
 import cartopy.crs as ccrs
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -27,7 +20,13 @@ import sys
 import datetime
 import netCDF4 as nc
 
-###############################################
+#### USER INPUTS ###########################################################
+
+query_lat = 35.3892  #  latitude of target
+query_lon = -97.6005  #  longitude of target
+dx, dy = -2.9275e+04, 6.2106e+03  # dx/y in meters from radar to target
+
+############################################################################
 # list all files in directory
 directory = '/h/eol/nbarron/export/radardata/'
 # os.chdir(directory)
@@ -51,9 +50,7 @@ for file,ifile in zip(files,range(0,len(files))):
     dts[ifile] = (datetime.datetime.strptime(files[ifile], 'KTLX%Y%m%d_%H%M%S_V06.gz') - datetime.datetime(1970,1,1)).total_seconds()
     dts2[ifile] = datetime.datetime.strptime(files[ifile], 'KTLX%Y%m%d_%H%M%S_V06.gz')
 
-    query_lat = 35.3892  #  latitude of target
-    query_lon = -97.6005  #  longitude of target
-    dx, dy = -2.9275e+04, 6.2106e+03  # dx/y in meters from radar to target
+    
 
     for ii in range(0,18):
         try:
@@ -91,30 +88,7 @@ for ii in range(0,len(uHeights)):
     refProfile2[:,ii] = 10*np.log10(np.nanmean(10**(refProfile[:,mask]/10),axis=1))
     zdrProfile2[:,ii] = 10*np.log10(np.nanmean(10**(zdrProfile[:,mask]/10),axis=1))
 
-
-
-plt.figure(figsize=(10,4))
-plt.ylabel('Height (m)')
-plt.contourf(dts2,uHeights,refProfile2.T,vmin=-10,vmax=64, cmap=ctables.registry.get_colortable('NWSReflectivity'))
-# plt.set_cmap(ctables.colortables['NWSReflectivity'])
-plt.xlabel('Time')
-plt.title('Reflectivity')
-plt.xlim([datetime.datetime(2015,6,13,0,0,0),datetime.datetime(2015,6,13,23,59,59)])
-# plt.colormap
-plt.colorbar()
-plt.savefig('/h/eol/nbarron/figures/evap/KTLXReflectivityTimeEvolution.png')
-
-plt.figure(figsize=(10,4))
-plt.ylabel('Height (m)')
-plt.contourf(dts2,uHeights,zdrProfile2.T,vmin=0,vmax=5, cmap = 'BlueBrown11')
-plt.xlabel('Time')
-plt.title('ZDR')
-plt.colorbar()
-plt.xlim([datetime.datetime(2015,6,13,0,0,0),datetime.datetime(2015,6,13,23,59,59)])
-
-plt.savefig('/h/eol/nbarron/figures/evap/KTLXZDRTimeEvolution.png')
-
-# write data in netcdf file
+# write data to netcdf file
 ncfile = nc.Dataset('KTLXProfiles.nc','w')
 ncfile.createDimension('time',len(files))
 ncfile.createDimension('height',len(uHeights))
@@ -123,12 +97,10 @@ ncfile.createVariable('time','f8',('time',))
 ncfile.createVariable('height','f8',('height',))
 ncfile.createVariable('refProfile','f8',('time','height',))
 ncfile.createVariable('zdrProfile','f8',('time','height',))
-# ncfile.createVariable('heightProfile','f8',('time','height',))
 
 ncfile.variables['time'][:] = dts
 ncfile.variables['height'][:] = uHeights
 ncfile.variables['refProfile'][:] = refProfile2
 ncfile.variables['zdrProfile'][:] = zdrProfile2
-# ncfile.variables['heightProfile'][:] = heightProfile
 
 ncfile.close()

@@ -11,10 +11,9 @@ classdef exmiras < thermo
         w % vertical (0,0,1) wind speed in m/s (same size as T)
 
 
-        %% thermodynamic properties
-        dHevap  = 2256e3 % J/kg; enthalpy of vaporization
+        
 
-
+        %% number concentration properties
         N       % m^-3 mm^-1; number concentration of droplets
         N0      % m^-3; previous number concentration of droplets
         N00    % initial scaling factor for number concentration of droplets
@@ -22,9 +21,8 @@ classdef exmiras < thermo
         mu      %shape parameter
         gamma   % shape parameter
 
-        nBins = 250 %number of bins for droplet size distribution
         dt = 10 % s; time step
-        st % length of storm (raining) in seconds
+        st % length of simulation in seconds
 
         %% simulation domain (same size as T)
         xgrid
@@ -60,9 +58,13 @@ classdef exmiras < thermo
     end
 
     %% constant properties
-    properties (Constant, Access = private)
+    properties (Constant)
+        nBins = 250 %number of bins for droplet size distribution
+
         dMax = 8 % mm; %maximum droplet size 
 
+        %% thermodynamic properties
+        dHevap  = 2256e3 % J/kg; enthalpy of vaporization
     end
 
     properties (Dependent)
@@ -74,7 +76,7 @@ classdef exmiras < thermo
 
       
 
-        %% diagnostic quantities
+        %% radar quantities
         Zhh % reflectivity (horizontal)
         Zvv % reflectivity (vertical)
         Zdr % differential reflectivity

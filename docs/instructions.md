@@ -92,7 +92,7 @@ From this point forward, `exmiras` refers to the `exmiras.m` class, while `EXMIR
     - *`ex.dTevap % K, [sx, sy, sz], dependent`*: the change in atmospheric temperature from evaporative processes.
 
 ### running the simulation
-3. Once all of the properties have been set, you can run the simulation using the `ex = ex.integrate();` class method. This will run the simulation for the specified time and update all of the properties at each time step. If you want to record the simulation's result at each time steps, using something like the following code snippet:
+3. Once all of the properties have been set, you can run the simulation using the `ex = ex.integrate();` class method. This will simulate a single time step and update all of the properties at each time step. If you want to record the simulation's result at each time steps, using something like the following code snippet:
 
     ```matlab
     T = zeros(numSteps, sz);

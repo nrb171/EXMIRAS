@@ -152,21 +152,21 @@ classdef exmiras < thermo
             b = ((obj.D/1000).^3./r).^(1/3);
             a = b.*r;
             % keyboard
-            
-            S = load('S.mat');
-            iWavelength = find(S.wavelengths == lambda);
-            % keyboard
+            try
+                S = load('S.mat');
+                iWavelength = find(S.wavelengths == lambda);
+                % keyboard
 
-            dpp.fa = cellfun(@(x) x(1,1), S.S(iWavelength,:));
-            dpp.fb = -cellfun(@(x) x(2,2), S.S(iWavelength,:));
-
-            reflh = readmatrix('./LUTs/reflh.txt');
-            reflv = readmatrix('./LUTs/reflv.txt');
-            xsecth = readmatrix('./LUTs/xsecth.txt');
-            xsectv = readmatrix('./LUTs/xsectv.txt');
-            rhohva = readmatrix('./LUTs/rhohva.txt');
-            rhohvb = readmatrix('./LUTs/rhohvb.txt');
-            kdpl = readmatrix('./LUTs/kdp.txt');
+                dpp.fa = cellfun(@(x) x(1,1), S.S(iWavelength,:));
+                dpp.fb = -cellfun(@(x) x(2,2), S.S(iWavelength,:));
+            end
+            reflh = readmatrix('../data/LUTs/reflh.txt');
+            reflv = readmatrix('../data/LUTs/reflv.txt');
+            xsecth = readmatrix('../data/LUTs/xsecth.txt');
+            xsectv = readmatrix('../data/LUTs/xsectv.txt');
+            rhohva = readmatrix('../data/LUTs/rhohva.txt');
+            rhohvb = readmatrix('../data/LUTs/rhohvb.txt');
+            kdpl = readmatrix('../data/LUTs/kdp.txt');
             % N = squeeze(ev.N(1,1,end,:))';
 
 

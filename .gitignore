@@ -1,4 +1,6 @@
-EXMIRAS.o*
-EXMIRAS.e*
+*EXMIRAS.o*
+*EXMIRAS.e*
 *ideal*.png
+*test*.png
 *.mat
+*.sh

@@ -1,14 +1,22 @@
 % if you acquired this file from the APAR folder, please see https://github.com/nrb171/EXMIRAS for the latest version of this and other scripts.
 
 % use the job scheduler (/glade/u/home/nbarron/workshop/EXMIRAS/scripts/helpers/submitEXMIRASJobs.sh) to run the ideal simulation on Derecho. This should be a fairly good example of how to run this on other HPC systems.
-T0 = str2num(getenv('T0'));
-humidity = str2num(getenv('HUMIDITY'));
-for dBZStart = 30:5:50
-    for zdr = 0.4:0.4:2
-        parFunction(T0, humidity, dBZStart, zdr, "S", -6.5)
+% T0 = str2num(getenv('T0'));
+% humidity = str2num(getenv('HUMIDITY'));
+global saveDir
+saveDir = '/glade/u/home/nbarron/work/exmirasData/';
+tRange = 285:5:310;
+tTop = numel(tRange);
+for ii = 1:tTop
+    T0 = tRange(ii);
+    for humidity = 0.1:0.1:0.9
+        for dBZStart = 30:5:50
+            for zdr = 0.4:0.4:2
+                parFunction(T0, humidity, dBZStart, zdr, "S", -6.5)
+            end
+        end
     end
 end
-
 %%% function to run the ideal simulation %%%
 function parFunction(T0m, humidity, dBZStart, zdr, bandName, lapseRate)
     % Run the ideal simulation                  
@@ -59,7 +67,7 @@ function parFunction(T0m, humidity, dBZStart, zdr, bandName, lapseRate)
     ExmirasRun.ID = sprintf('%s_ideal_%d_%1.2f_%2.0d_%1.2f', bandName, T0m, humidity,dBZStart, zdr);
 
     %% check to see if the file already exists, if so, break the loop
-    filesInSaveDir = dir('/glade/u/home/nbarron/work/exmirasData/');
+    filesInSaveDir = dir(saveDir);
     if any(contains({filesInSaveDir.name}, ExmirasRun.ID))
         fprintf('File %s already exists, skipping...\n', ExmirasRun.ID)
         return
@@ -100,7 +108,7 @@ function parFunction(T0m, humidity, dBZStart, zdr, bandName, lapseRate)
     % set up grids/save run
     ExmirasRun.Grids.tgrid = ((1:i))*ex.dt;
     ExmirasRun.Grids.zgrid = ex.zgrid;
-    save(['/glade/u/home/nbarron/work/exmirasData/',ExmirasRun.ID,'.mat'], 'ExmirasRun')
+    save([saveDir,ExmirasRun.ID,'.mat'], 'ExmirasRun')
 
     % Plot the height-time profiles for the chosen variables
     [TT, ZT] = meshgrid(ExmirasRun.Grids.tgrid, ExmirasRun.Grids.zgrid);

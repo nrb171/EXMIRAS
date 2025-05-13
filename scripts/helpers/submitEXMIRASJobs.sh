@@ -1,5 +1,5 @@
 #PBS -N EXMIRAS-submit
-#PBS -A NEOL0014
+#PBS -A projectID
 #PBS -q main
 #PBS -l walltime=12:00:00
 #PBS -l select=1:ncpus=1:mem=1GB
@@ -16,7 +16,7 @@ do
         # Create a job script for each temperature
         cat << EOF > runEXMIRAS_$T0-$HUMIDITY.sh
 #PBS -N EMRS-$T0-$HUMIDITY
-#PBS -A NEOL0014
+#PBS -A projectID
 #PBS -q main
 #PBS -l walltime=12:00:00
 #PBS -l select=1:ncpus=32:mem=64GB

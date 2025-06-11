@@ -274,8 +274,21 @@ classdef exmiras < thermo
                 ind = inds(i);
                 % keyboard
                 fun = @(x) calcErr(obj, obj.dpp, Z(ind), Zdr(ind), initN(obj, obj.dpp, Z(ind), x(1), x(2)), x(1), x(2));
-                [x,fv] =  fminsearchbnd(fun, [5, 2.5], [0, -1], [20, 5]);
 
+                gammai = 10./(Zdr(ind)); % initial guess for gamma
+                mui = -0.016*gammai.^2 + 1.213*gammai - 1.957;% initial guess for mu
+                % gammai = 3
+                % mui = 1
+                x2 = [];
+                for j = 1:50
+                    gammai2 = gammai + 4*rand()-2;
+                    mui2 = mui + 4*rand()-2;
+                    [x,fv] =  fminsearchbnd(fun, [gammai2, mui2], [0, -2], [30, 23]);
+                    x2(j,:) = x;
+                end
+                x = mode(x2,1);
+                % keyboard
+                %                             gamma, mu
                 obj.N(ix(i), iy(i), iz(i), :) = initN(obj, obj.dpp, Z(ind), x(1), x(2));
                 mu(ix(i), iy(i), iz(i)) = x(2);
                 gamma(ix(i), iy(i), iz(i)) = x(1);

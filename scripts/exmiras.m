@@ -38,6 +38,14 @@ classdef exmiras < thermo
         D % mm; characteristic droplet size in each bin
         M % kg; mass of droplets in each bin
         vt % function of D; terminal velocity of droplets
+
+        ts % time coordinate for the simulation, in seconds
+
+        waterVaporInteraction = true % whether to include water vapor interaction (evaporation) or not
+        coalToggle = true % whether to include coalescence or not
+        falloutToggle = true % whether to include fallout or not
+        evapToggle = true % whether to include evaporation or not
+
         
 
 
@@ -124,6 +132,9 @@ classdef exmiras < thermo
             
             dr = drdt*obj.dt;
             dD = dr*2*1000;
+            dD = min(dD, repmat(obj.D, [size(dD,1), 1])); % limit to maximum droplet size
+            % dD = 
+            
             dD = reshape(dD, [size(obj.T), obj.nBins]);
         end
 
@@ -268,30 +279,38 @@ classdef exmiras < thermo
             [ix, iy, iz] = ind2sub(size(Z), inds);
             mu = NaN(size(Z));
             gamma = NaN(size(Z));
+            rng('default')
             % keyboard
             obj.dpp = obj.dualPolPreprocessing(obj.lambda);
             for i = 1:length(inds)
-                ind = inds(i);
-                % keyboard
-                fun = @(x) calcErr(obj, obj.dpp, Z(ind), Zdr(ind), initN(obj, obj.dpp, Z(ind), x(1), x(2)), x(1), x(2));
+                if isnan(Z(inds(i))) | isnan(Zdr(inds(i)))
+                    obj.N(ix(i), iy(i), iz(i), :) = zeros(1, obj.nBins);
+                    mu(ix(i), iy(i), iz(i)) = NaN;
+                    gamma(ix(i), iy(i), iz(i)) = NaN;
+                else
+                    ind = inds(i);
+                    % keyboard
+                    fun = @(x) calcErr(obj, obj.dpp, Z(ind), Zdr(ind), initN(obj, obj.dpp, Z(ind), x(1), x(2)), x(1), x(2));
 
-                gammai = 10./(Zdr(ind)); % initial guess for gamma
-                mui = -0.016*gammai.^2 + 1.213*gammai - 1.957;% initial guess for mu
-                % gammai = 3
-                % mui = 1
-                x2 = [];
-                for j = 1:50
-                    gammai2 = gammai + 4*rand()-2;
-                    mui2 = mui + 4*rand()-2;
-                    [x,fv] =  fminsearchbnd(fun, [gammai2, mui2], [0, -2], [30, 23]);
-                    x2(j,:) = x;
+                    gammai = min(10./(Zdr(ind)),12); % initial guess for gamma
+                    mui = -0.016*gammai.^2 + 1.213*gammai - 1.957;% initial guess for mu
+                    % gammai = 3
+                    % mui = 1
+                    x2 = [];
+                    parfor j = 1:30
+                        gammai2 = gammai + 4*rand()-2;
+                        mui2 = mui + 4*rand()-2;
+                        [x,fv] =  fminsearchbnd(fun, [gammai2, mui2], [0, -2], [20, 15]);
+                        x2(j,:) = x;
+                    end
+                    x = mode(x2,1);
+                    % keyboard
+                    %                             gamma, mu
+                    obj.N(ix(i), iy(i), iz(i), :) = initN(obj, obj.dpp, Z(ind), x(1), x(2));
+                    % obj.N(ix(i), iy(i), iz(i), squeeze(obj.N(ix(i), iy(i), iz(i), :))<1e-6) = 0;
+                    mu(ix(i), iy(i), iz(i)) = x(2);
+                    gamma(ix(i), iy(i), iz(i)) = x(1);
                 end
-                x = mode(x2,1);
-                % keyboard
-                %                             gamma, mu
-                obj.N(ix(i), iy(i), iz(i), :) = initN(obj, obj.dpp, Z(ind), x(1), x(2));
-                mu(ix(i), iy(i), iz(i)) = x(2);
-                gamma(ix(i), iy(i), iz(i)) = x(1);
             end
             % keyboard
             obj.mu = mu;
@@ -402,12 +421,52 @@ classdef exmiras < thermo
     methods 
         % change in dsd due to evaporation
         function dN = get.dNevap(obj)
+
             % set up change in number concentration            
             dNt = reshape(obj.N, [], obj.nBins).*(reshape(obj.dDevap, [], obj.nBins) ./ (obj.Dw));            
             dN = dNt;
             
             dN(:,1:end-1) = dN(:,1:end-1)-dNt(:,2:end);
             dN = reshape(dN, [size(obj.T), obj.nBins]);
+
+            % % set up change in number concentration 
+            % dDevap = obj.dDevap; 
+            % % dDevap(obj.N == 0) = 0; % no change in droplet size if no droplets present
+            % inds = find((nansum(obj.N,4)));
+            % [xi, yi, zi] = ind2sub(size(obj.T), inds);
+            % dN = zeros(size(obj.N));
+            % % keyboard
+            % for ii = 1:numel(inds)
+            %     % keyboard
+            %     % try
+            %     %     fDSD = griddedInterpolant(sort(obj.D-squeeze(dDevap(xi(ii),yi(ii),zi(ii),:))'), squeeze(obj.N(xi(ii),yi(ii),zi(ii),:)), 'linear');
+            %     % catch
+            %     %     keyboard
+            %     % end
+            %     % for jj = 1:obj.nBins
+            %     %     shiftedDSD(jj) = integral(@(x) fDSD(x), obj.De(jj), obj.De(jj+1));
+            %     % end
+            %     shiftedDSD = interp1(obj.D-squeeze(dDevap(xi(ii),yi(ii),zi(ii),:))', squeeze(obj.N(xi(ii),yi(ii),zi(ii),:)), obj.D, 'linear', 'extrap');
+            %     scaler = trapz(obj.D, shiftedDSD)/trapz(obj.D, squeeze(obj.N(xi(ii),yi(ii),zi(ii),:)));
+            %     shiftedDSD = shiftedDSD./scaler;
+            %     dN(xi(ii), yi(ii), zi(ii),:) = squeeze(obj.N(xi(ii),yi(ii),zi(ii),:))' - shiftedDSD;
+                
+            % end
+            dN(obj.N+dN<0) = -obj.N(obj.N+dN<0); % fix overflowing values.
+            % % dN = smooth(dN, 0.1, 'loess', 4); % smooth out the dN values
+            % keyboard
+            % tic
+            inds = find((nansum(obj.N,4)));
+            [xi, yi, zi] = ind2sub(size(obj.T), inds);
+            % dN = zeros(size(obj.N));
+            % keyboard
+            % tic
+            for ii = 1:numel(inds)
+                dN(xi(ii), yi(ii), zi(ii),:) = filloutliers(squeeze(dN(xi(ii),yi(ii),zi(ii),:)),'linear','movmedian', 3);
+            end
+            % toc
+            
+            % keyboard
         end
 
         % function dN = get.dNadvect(obj)
@@ -582,24 +641,51 @@ classdef exmiras < thermo
             end
 
             %% calculate rates of change
+            operators = ["dNevap", "dNfallout", "dNcoal"];
+            
             % keyboard
             dT = obj.dTevap;
-            dN = obj.dNevap + obj.dNfallout + obj.dNcoal;
             dm = obj.dmevap;
+            % dN = zeros(size(obj.N));
+     
+            % dNevap = obj.dNevap;
+            obj.N0 = obj.N;
 
-            if any(obj.T(:)<abs(dT(:))) || any(obj.mv(:) < abs(dm(:)))
+            for ii = 1:length(operators)
+                % keyboard
+                operatorToggle = char(operators(ii)); operatorToggle = [operatorToggle(3:end), 'Toggle'];
+                if obj.(operatorToggle)
+                    obj.N = obj.N + obj.(operators(ii));
+                end
+            end
+
+            % dNfallout = obj.dNfallout;
+            % dNcoal = obj.dNcoal;
+            % dN = obj.dNevap + obj.dNfallout + obj.dNcoal;
+
+            
+            
+            % obj.N(obj.N+dN<0)
+            % obj.dNevap(obj.N+dN<0)
+            
+            % keyboard
+            % obj.N = obj.N + dN;
+            obj.N(obj.N >-1e-4 & obj.N<0) = 0; % remove negative values
+
+            if any(obj.T(:)<abs(dT(:))) || any(obj.mv(:) < abs(dm(:))) || any(obj.N<0,"all")
+                % keyboard
                 obj.dt = obj.dt/2;
                 warning('Time step too large, reducing to %d', obj.dt)
+                % obj.integrate;
                 return
 
             end
 
             %% update state variables
-
-            obj.N0 = obj.N;
-            obj.N = obj.N + dN;
-            obj.T = obj.T + dT;
-            obj.pv = (obj.mv - dm).*obj.Rv.*obj.T/100;
+            if obj.waterVaporInteraction
+                obj.T = obj.T + dT;
+                obj.pv = (obj.mv - dm).*obj.Rv.*obj.T/100;
+            end
 
             %% update the parent field
             if obj.nSteps < obj.st
@@ -614,6 +700,7 @@ classdef exmiras < thermo
 
             % calculate dropsize distribution
             obj.De = logspace(log10(0.1),log10(obj.dMax),obj.nBins+1);
+            % obj.De = linspace(0.1, obj.dMax, obj.nBins+1); % mm; edges of droplet size bins
             obj.D =  (obj.De(1:end-1) + obj.De(2:end))/2;
             obj.Dw = diff(obj.De);
 

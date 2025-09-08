@@ -46,6 +46,8 @@ classdef exmiras < thermo
         falloutToggle = true % whether to include fallout or not
         evapToggle = true % whether to include evaporation or not
 
+        rngToggle = true
+
         
 
 
@@ -116,6 +118,8 @@ classdef exmiras < thermo
                 bandName = ["S",    "C",    "X",        "Ku",       "Ka"       ];
                 wavelength = [111,  53.5,   33.3,       22,         8.43       ];
                 obj.lambda = wavelength(strcmp(bandName, lambdaName));
+
+                obj.dpp = obj.dualPolPreprocessing(obj.lambda);
             % end
             % warning('on')
         end
@@ -279,7 +283,9 @@ classdef exmiras < thermo
             [ix, iy, iz] = ind2sub(size(Z), inds);
             mu = NaN(size(Z));
             gamma = NaN(size(Z));
-            rng('default')
+            if obj.rngToggle
+                rng(1); % for reproducibility
+            end
             % keyboard
             obj.dpp = obj.dualPolPreprocessing(obj.lambda);
             for i = 1:length(inds)
@@ -292,20 +298,20 @@ classdef exmiras < thermo
                     % keyboard
                     fun = @(x) calcErr(obj, obj.dpp, Z(ind), Zdr(ind), initN(obj, obj.dpp, Z(ind), x(1), x(2)), x(1), x(2));
 
-                    gammai = min(10./(Zdr(ind)),12); % initial guess for gamma
+                    gammai = min(3./(Zdr(ind)),12); % initial guess for gamma
                     mui = -0.016*gammai.^2 + 1.213*gammai - 1.957;% initial guess for mu
                     % gammai = 3
                     % mui = 1
                     x2 = [];
-                    parfor j = 1:30
-                        gammai2 = gammai + 4*rand()-2;
-                        mui2 = mui + 4*rand()-2;
+                    for j = 1
+                        gammai2 = gammai + 6*rand()-3;
+                        mui2 = mui + 6*rand()-3;
                         [x,fv] =  fminsearchbnd(fun, [gammai2, mui2], [0, -2], [20, 15]);
                         x2(j,:) = x;
                     end
                     x = mode(x2,1);
                     % keyboard
-                    %                             gamma, mu
+                    %                                                           gamma, mu
                     obj.N(ix(i), iy(i), iz(i), :) = initN(obj, obj.dpp, Z(ind), x(1), x(2));
                     % obj.N(ix(i), iy(i), iz(i), squeeze(obj.N(ix(i), iy(i), iz(i), :))<1e-6) = 0;
                     mu(ix(i), iy(i), iz(i)) = x(2);
@@ -380,6 +386,112 @@ classdef exmiras < thermo
             end
         end
 
+        function obj = initFromDm(obj, Z, Zdr, Dm)
+            % in: Z in dBZ, Zdr in dBz
+            % out: N in m^-3 mm^-1
+            % keyboard
+            inds = find(~isinf(Z));
+            [ix, iy, iz] = ind2sub(size(Z), inds);
+            mu = NaN(size(Z));
+            gamma = NaN(size(Z));
+            if obj.rngToggle
+                rng(1); % for reproducibility
+            end
+            % keyboard
+            obj.dpp = obj.dualPolPreprocessing(obj.lambda);
+            
+            
+            
+            
+            fun = @(x) calcErr(obj, obj.dpp, Z, Zdr, Dm, initN(obj, obj.dpp, Z, x(1), x(2)), x(1), x(2));
+            gammai = min(3./(Zdr),12); % initial guess for gamma
+            mui = -0.016*gammai.^2 + 1.213*gammai - 1.957;% initial guess for mu
+            
+            % keyboard
+            [x,~] =  fminsearchbnd(fun, [gammai, mui], [0, -2], [20, 15]);
+  
+            %                                                           gamma, mu
+            % obj.N(ix(i), iy(i), iz(i), :) = initN(obj, obj.dpp, Z(ind), x(1), x(2));
+            
+            mu = x(2);
+            gamma = x(1);
+            % keyboard
+            obj.mu = mu;
+            obj.gamma = gamma;
+            obj.N00 = getN0(obj, obj.dpp, Z, gamma, mu);
+            if isempty(obj.N)
+                obj.N = zeros(numel(obj.xgrid), numel(obj.ygrid), numel(obj.zgrid), numel(obj.D));
+            end
+            obj.N(end, end, end, :) = obj.N00.*obj.D.^obj.mu.*exp(-obj.gamma.*obj.D);
+
+            
+
+            function N0 = getN0(obj, dpp, dBZi, gamma, mu)
+                % various preprocessing steps to calculate dual-pol variables
+                
+                % keyboard
+                
+                mu = mu(:);
+                gamma = gamma(:);
+
+
+                %! overriding mu
+                % mu = zeros(size(gamma));
+                % mu(isnan(gamma)) = NaN;
+                % mu = -0.0201*gamma.^2 + 0.902*gamma - 1.78;
+
+
+                % N = reshape(N, [], obj.nBins);
+                N1 = (obj.D.^(mu) .* exp(-gamma.*obj.D));
+                % N1 = repmat(N1, [1, 1])
+                Zhh = calcZhh(obj, N1, dpp);
+
+                N0 = 10.^(dBZi(:)/10)./10.^(Zhh(:)/10);
+                N0 = reshape(N0, size(obj.mu));
+            end
+
+            function [N] = initN(obj, dpp, dBZi, gamma, mu)
+                % various preprocessing steps to calculate dual-pol variables
+
+                % N = reshape(N, [], obj.nBins);
+                N1 = (obj.D.^(mu) .* exp(-gamma*obj.D));
+                % N1 = repmat(N1, [1, 1])
+                Zhh = 10^(calcZhh(obj, N1, dpp)/10);
+                % Zvv = calcZvv(obj, N1, dpp);
+                % Zhh = 4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A2 + abs(dpp.fb-dpp.fa).^2.*dpp.A4).*N1);
+                % Zvv = 4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A1 + abs(dpp.fb-dpp.fa).^2.*dpp.A3).*N1);
+                % keyboard
+
+                
+
+                N0 = 10^(dBZi/10)./(Zhh);
+
+                N = N0(:) .* (obj.D.^(mu) .* exp(-gamma*obj.D));
+            end
+            function err = calcErr(obj, dpp, dBZi, Zdri, Dm, N, gamma, mu)
+                % err = 1;
+                % keyboard
+                % b = obj.D;
+                % r = 0.9951 + 0.02510*obj.D - 0.03644*obj.D.^2 + 0.005303*obj.D.^3 - 0.0002492*obj.D.^4;
+                % a = obj.D.*r;
+
+                % obj.D = (a.*b.^2).^(1/3);
+                Zhh2 = calcZhh(obj, N, dpp);
+                Zvv2 = calcZvv(obj, N, dpp);
+                % Zhh2 = 10*log10(4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 ).*N, 2))
+                % Zvv2 = 10*log10(4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fa).^2 ).*N, 2))
+                % Zdr = Zhh2 - Zvv2;
+
+                % keyboard
+                dZdr = Zhh2 - Zvv2 - Zdri;
+                [~,dmind]=max(N);
+                Dm2 = obj.D(dmind);
+                err = abs(abs(dZdr) + 10*abs((Dm2 - Dm)));
+                
+            end
+        
+        end
+
         %% get methods for reflectivity
         function Zhh = get.Zhh(obj)
             % in: D in mm
@@ -425,8 +537,9 @@ classdef exmiras < thermo
             % set up change in number concentration            
             dNt = reshape(obj.N, [], obj.nBins).*(reshape(obj.dDevap, [], obj.nBins) ./ (obj.Dw));            
             dN = dNt;
-            
-            dN(:,1:end-1) = dN(:,1:end-1)-dNt(:,2:end);
+            % 
+            % keyboard
+            dN(:,1:end-1) = (dN(:,1:end-1)-dNt(:,2:end));
             dN = reshape(dN, [size(obj.T), obj.nBins]);
 
             % % set up change in number concentration 
@@ -602,6 +715,7 @@ classdef exmiras < thermo
             dm = dNevapf .* obj.M;
             dm = reshape(dm, [size(obj.N)]);
             dm = trapz(obj.D,dm, numel(size(dm)));
+            % trapz(a,v,)     
             % dDevap = reshape(obj.dDevap, [], obj.nBins);
             % D0 = repmat(obj.D, [size(dDevap,1),1]);
             % D1 = D0 + dDevap;

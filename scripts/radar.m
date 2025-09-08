@@ -18,6 +18,9 @@ classdef radar < handle
 
         epsilon = 62.1 - sqrt(-1)*32.0; % dielectric constant of liquid water
         Kw = 0.93; % reflectivity factor of water
+
+        rngToggle = false; % toggle for random number generator
+
     end
 
     %% radar methods
@@ -56,7 +59,7 @@ classdef radar < handle
         end
 
         %% calculators for reflectivity
-        function Zhh = calcZhh(radar, N, dpp)
+        function Zhh = calcZhh(radar, N)
             % in: N in m^-3 mm^-1, D in mm
             % out: horizontal reflectivity in dBZ
             % keyboard
@@ -64,48 +67,56 @@ classdef radar < handle
         
 
             Zhh = 10*log10(...
-                trapz(radar.D, dpp.reflh.*N, 2) ...
+                trapz(radar.D, radar.dpp.reflh.*N, 2) ...
             );
            
-            Zhh = Zhh;
+            % Zhh = Zhh;
            
         end
 
-        function Zvv = calcZvv(radar, N, dpp)
+        function Zvv = calcZvv(radar, N)
             % in: N in m^-3 mm^-1, D in mm
             % out: vertical reflectivity in dBZ
             N = reshape(N, [], radar.nBins);
             % dpp = radar.dualPolPreprocessing(radar.lambda);
            
             Zvv = 10*log10(...
-                trapz(radar.D, dpp.reflv.*N, 2) ...
+                trapz(radar.D, radar.dpp.reflv.*N, 2) ...
             );
            
-            Zvv = Zvv;
+            % Zvv = Zvv;
            
         end
 
-        function rhohv = calcRhohv(radar, N, dpp)
+        function Zdr = calcZdr(radar, N)
+            % in: N in m^-3 mm^-1, D in mm
+            % out: differential reflectivity in dB
+            N = reshape(N, [], radar.nBins);
+            Zhh = radar.calcZhh(N);
+            Zvv = radar.calcZvv(N);
+            Zdr = Zhh - Zvv;
+        end
+
+        function rhohv = calcRhohv(radar, N)
             N = reshape(N, [], radar.nBins);
             
-            a = dpp.rhohva;
-            b = dpp.rhohvb;
-            c = dpp.xsecth./(2*pi);
-            d = dpp.xsectv./(2*pi);
+            a = radar.dpp.rhohva;
+            b = radar.dpp.rhohvb;
+            c = radar.dpp.xsecth./(2*pi);
+            d = radar.dpp.xsectv./(2*pi);
             
-            rho_hv = ... 
+            rhohv = ... 
                 sqrt(...
                     ((trapz(radar.D, N.*a,2)).^2 + ...
                     (trapz(radar.D, N.*b,2)).^2)) ./ ...
                     sqrt((trapz(radar.D, N.*c,2) .* trapz(radar.D, N.*d,2)) ...
             );
-            rhohv = reshape(rho_hv, size(radar.N, [1:3]));
+            
         end
             
-        function kdp = calcKdp(radar, N, dpp)
+        function kdp = calcKdp(radar, N)
             N = reshape(N, [], radar.nBins);
-            kdp = trapz(radar.D, N.*dpp.kdpl,2);
-            kdp = reshape(kdp, size(radar.N, [1:3]));
+            kdp = trapz(radar.D, N.*radar.dpp.kdpl,2);
         end
        
     end
@@ -120,57 +131,7 @@ classdef radar < handle
     end
     %% other useful methods
     methods
-         %% initialize N based on reflectivity and Zdr
-        function [N,N0, mu, gamma] = estimateDSD(radar, Z, Zdr)
-            % in: Z in dBZ, Zdr in dBz
-            % out: N in m^-3 mm^-1
-            % keyboard
-            inds = find(~isinf(Z));
-            mu = NaN(size(Z));
-            gamma = NaN(size(Z));
-            % keyboard
-            for i = 1:length(inds)
-                ind = inds(i);
-                % keyboard
-                fun = @(x) calcErr(radar, radar.dpp, Z(ind), Zdr(ind), initN(radar, radar.dpp, Z(ind), x(1), x(2)), x(1), x(2));
-                
-                [x,fv] =  fminsearchbnd(fun, [5, 2.5], [0, -1], [20, 5]);
-
-                N(inds(i), :) = initN(radar, radar.dpp, Z(ind), x(1), x(2));
-                mu(inds(i)) = x(2);
-                gamma(inds(i)) = x(1);
-            end
-            radar.mu = mu;
-            radar.gamma = gamma;
-            N0 = getN0(radar, radar.dpp, Z, gamma, mu);
-            radar.N0 = N0;
-
-            function N0 = getN0(radar, dpp, dBZi, gamma, mu)
-                % various preprocessing steps to calculate dual-pol variables
-                mu = mu(:);
-                gamma = gamma(:);
-                N1 = (radar.D.^(mu) .* exp(-gamma.*radar.D));
-                Zhh = radar.calcZhh(N1, dpp);
-                N0 = 10.^(dBZi(:)/10)./10.^(Zhh(:)/10);
-                N0 = reshape(N0, size(radar.mu));
-            end
-
-            function [N] = initN(radar, dpp, dBZi, gamma, mu)
-                % various preprocessing steps to calculate dual-pol variables
-                N1 = (radar.D.^(mu) .* exp(-gamma*radar.D));
-                Zhh = 10^(calcZhh(radar, N1, dpp)/10);
-                N0 = 10^(dBZi/10)./(Zhh);
-                N = N0(:) .* (radar.D.^(mu) .* exp(-gamma*radar.D));
-            end
-            function err = calcErr(radar, dpp, dBZi, Zdri, N, gamma, mu)
-
-                Zhh2 = radar.calcZhh(N, dpp);
-                Zvv2 = radar.calcZvv(N, dpp);
-                dZdr = Zhh2 - Zvv2 - Zdri;
-                err = abs(dZdr);
-                
-            end
-        end
+        
 
         function [lwp] = calcLWP(radar, N)
             % in: N in m^-3 mm^-1

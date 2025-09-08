@@ -48,6 +48,10 @@ classdef exmiras < thermo
 
         rngToggle = true
 
+        %% assistant classes
+        ra  % radar class instance
+        da % dsdAssimilation class instance
+
         
 
 
@@ -61,7 +65,7 @@ classdef exmiras < thermo
         
         Kw = 0.93; % reflectivity factor of water
 
-        refCalc = 'NEW'; % method of calculating reflectivity
+        % refCalc = 'NEW'; % method of calculating reflectivity
 
         E % collision efficiency
         
@@ -112,17 +116,7 @@ classdef exmiras < thermo
 
     
     methods
-        function obj = initFromLambdaName(obj, lambdaName)
-            % warning('off')
-            
-                bandName = ["S",    "C",    "X",        "Ku",       "Ka"       ];
-                wavelength = [111,  53.5,   33.3,       22,         8.43       ];
-                obj.lambda = wavelength(strcmp(bandName, lambdaName));
-
-                obj.dpp = obj.dualPolPreprocessing(obj.lambda);
-            % end
-            % warning('on')
-        end
+        
         
         
         % change in droplet size due to evaporation
@@ -158,338 +152,21 @@ classdef exmiras < thermo
 
     end
 
-    %% reflectivity methods
+    %% radar methods
     methods
-        function dpp = dualPolPreprocessing(obj, lambda)
-            % various preprocessing steps to calculate dual-pol variables
-            % keyboard
-            r = 0.9951 + 0.02510*obj.D - 0.03644*obj.D.^2 + 0.005303*obj.D.^3 - 0.0002492*obj.D.^4;
-            b = ((obj.D/1000).^3./r).^(1/3);
-            a = b.*r;
-            % keyboard
-            try
-                S = load('S.mat');
-                iWavelength = find(S.wavelengths == lambda);
-                % keyboard
-
-                dpp.fa = cellfun(@(x) x(1,1), S.S(iWavelength,:));
-                dpp.fb = -cellfun(@(x) x(2,2), S.S(iWavelength,:));
-            end
-            reflh = readmatrix('../data/LUTs/reflh.txt');
-            reflv = readmatrix('../data/LUTs/reflv.txt');
-            xsecth = readmatrix('../data/LUTs/xsecth.txt');
-            xsectv = readmatrix('../data/LUTs/xsectv.txt');
-            rhohva = readmatrix('../data/LUTs/rhohva.txt');
-            rhohvb = readmatrix('../data/LUTs/rhohvb.txt');
-            kdpl = readmatrix('../data/LUTs/kdp.txt');
-            % N = squeeze(ev.N(1,1,end,:))';
-
-
-            iWavelength = find([111, 53.5, 33.3, 22.0, 8.43] == lambda);
-            dpp.reflh = reflh(iWavelength,:);
-            dpp.reflv = reflv(iWavelength,:);
-            dpp.xsecth = xsecth(iWavelength,:);
-            dpp.xsectv = xsectv(iWavelength,:);
-            dpp.rhohva = rhohva(iWavelength,:);
-            dpp.rhohvb = rhohvb(iWavelength,:);
-            dpp.kdpl = kdpl(iWavelength,:);
-            
-            r1 = exp(-2*(10*1/180*pi)^2);
-            dpp.A1 = 1/4*(1+r1)^2;
-            dpp.A2 = 1/4*(1-r1)^2;
-            dpp.A3 = (3/8 + 1/2*r1+1/8*r1^4)^2;
-            dpp.A4 = (3/8 - 1/2*r1+1/8*r1^4)*(3/8 + 1/2*r1+1/8*r1^4);
-        end
-        %% calculators for reflectivity
-        function Zhh = calcZhh(obj, N, dpp)
-            % in: N in m^-3 mm^-1, D in mm
-            % out: horizontal reflectivity in dBZ
-            % keyboard
-            N = reshape(N, [], obj.nBins);
         
+        function obj = initializeRadarSimulator(obj, lambdaName)
+            %% initialize the radar object from a band name
+            bandName = ["S",    "C",    "X",        "Ku",       "Ka"       ];
+            wavelength = [111,  53.5,   33.3,       22,         8.43       ];
+            obj.lambda = wavelength(strcmp(bandName, lambdaName));
 
-            
-            % dpp = obj.dualPolPreprocessing(obj.lambda);
-            if strcmp(obj.refCalc, 'OLD')
-                Zhh = 10*log10(...
-                    4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*...
-                    trapz(obj.D,...
-                        (abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A2 + abs(dpp.fb-dpp.fa).^2.*dpp.A4).*N, 2)...
-                );
-            else
-                Zhh = 10*log10(...
-                    trapz(obj.D, dpp.reflh.*N, 2) ...
-                );
-            end
-            if numel(N) == obj.nBins
-                Zhh = Zhh;
-            else
-                Zhh = reshape(Zhh, numel(obj.xgrid), numel(obj.ygrid), numel(obj.zgrid));
-            end
-        end
+            obj.ra = radar(obj.lambda);
+            obj.ra.rngToggle = obj.rngToggle;
 
-        function Zvv = calcZvv(obj, N, dpp)
-            % in: N in m^-3 mm^-1, D in mm
-            % out: vertical reflectivity in dBZ
-            N = reshape(N, [], obj.nBins);
-            % dpp = obj.dualPolPreprocessing(obj.lambda);
-            if strcmp(obj.refCalc, 'OLD')
-                Zvv = 10*log10(4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A1 + abs(dpp.fb-dpp.fa).^2.*dpp.A3).*N, 2));    
-            else
-                Zvv = 10*log10(...
-                    trapz(obj.D, dpp.reflv.*N, 2) ...
-                );
-            end
-            if numel(N) == obj.nBins
-                Zvv = Zvv;
-            else
-                Zvv = reshape(Zvv, numel(obj.xgrid), numel(obj.ygrid), numel(obj.zgrid));
-            end
-        end
+            obj.da = dsdAssimilation(obj.lambda);
+            obj.da.ra.rngToggle = obj.rngToggle;
 
-        function rhohv = calcRhohv(obj, N, dpp)
-            N = reshape(N, [], obj.nBins);
-            % D = obj.D;
-            % iWavelength = 1
-            a = dpp.rhohva;
-            b = dpp.rhohvb;
-            c = dpp.xsecth./(2*pi);
-            d = dpp.xsectv./(2*pi);
-            % keyboard
-            % rhohv = readmatrix('/h/eol/nbarron/workshop/apar-scripts/evapModel/LUTs/rhohv.txt');
-            % N([1,3:end]) = 0;
-            % rho_hv = trapz(D, N.*rhohv(iWavelength,:))/trapz(D,N);
-            % N = N(end,:)
-            rho_hv = ... 
-                sqrt(...
-                    ((trapz(obj.D, N.*a,2)).^2 + ...
-                    (trapz(obj.D, N.*b,2)).^2)) ./ ...
-                    sqrt((trapz(obj.D, N.*c,2) .* trapz(obj.D, N.*d,2)) ...
-            );
-            rhohv = reshape(rho_hv, size(obj.N, [1:3]));
-        end
-            
-        function kdp = calcKdp(obj, N, dpp)
-            N = reshape(N, [], obj.nBins);
-            kdp = trapz(obj.D, N.*dpp.kdpl,2);
-            kdp = reshape(kdp, size(obj.N, [1:3]));
-        end
-        %% initialize N based on reflectivity and Zdr
-        function obj = initFromReflectivity(obj, Z, Zdr)
-            % in: Z in dBZ, Zdr in dBz
-            % out: N in m^-3 mm^-1
-            % keyboard
-            inds = find(~isinf(Z));
-            [ix, iy, iz] = ind2sub(size(Z), inds);
-            mu = NaN(size(Z));
-            gamma = NaN(size(Z));
-            if obj.rngToggle
-                rng(1); % for reproducibility
-            end
-            % keyboard
-            obj.dpp = obj.dualPolPreprocessing(obj.lambda);
-            for i = 1:length(inds)
-                if isnan(Z(inds(i))) | isnan(Zdr(inds(i)))
-                    obj.N(ix(i), iy(i), iz(i), :) = zeros(1, obj.nBins);
-                    mu(ix(i), iy(i), iz(i)) = NaN;
-                    gamma(ix(i), iy(i), iz(i)) = NaN;
-                else
-                    ind = inds(i);
-                    % keyboard
-                    fun = @(x) calcErr(obj, obj.dpp, Z(ind), Zdr(ind), initN(obj, obj.dpp, Z(ind), x(1), x(2)), x(1), x(2));
-
-                    gammai = min(3./(Zdr(ind)),12); % initial guess for gamma
-                    mui = -0.016*gammai.^2 + 1.213*gammai - 1.957;% initial guess for mu
-                    % gammai = 3
-                    % mui = 1
-                    x2 = [];
-                    for j = 1
-                        gammai2 = gammai + 6*rand()-3;
-                        mui2 = mui + 6*rand()-3;
-                        [x,fv] =  fminsearchbnd(fun, [gammai2, mui2], [0, -2], [20, 15]);
-                        x2(j,:) = x;
-                    end
-                    x = mode(x2,1);
-                    % keyboard
-                    %                                                           gamma, mu
-                    obj.N(ix(i), iy(i), iz(i), :) = initN(obj, obj.dpp, Z(ind), x(1), x(2));
-                    % obj.N(ix(i), iy(i), iz(i), squeeze(obj.N(ix(i), iy(i), iz(i), :))<1e-6) = 0;
-                    mu(ix(i), iy(i), iz(i)) = x(2);
-                    gamma(ix(i), iy(i), iz(i)) = x(1);
-                end
-            end
-            % keyboard
-            obj.mu = mu;
-            obj.gamma = gamma;
-            obj.N00 = getN0(obj, obj.dpp, Z, gamma, mu);
-
-            function N0 = getN0(obj, dpp, dBZi, gamma, mu)
-                % various preprocessing steps to calculate dual-pol variables
-                
-                % keyboard
-                
-                mu = mu(:);
-                gamma = gamma(:);
-
-
-                %! overriding mu
-                % mu = zeros(size(gamma));
-                % mu(isnan(gamma)) = NaN;
-                % mu = -0.0201*gamma.^2 + 0.902*gamma - 1.78;
-
-
-                % N = reshape(N, [], obj.nBins);
-                N1 = (obj.D.^(mu) .* exp(-gamma.*obj.D));
-                % N1 = repmat(N1, [1, 1])
-                Zhh = calcZhh(obj, N1, dpp);
-
-                N0 = 10.^(dBZi(:)/10)./10.^(Zhh(:)/10);
-                N0 = reshape(N0, size(obj.mu));
-            end
-
-            function [N] = initN(obj, dpp, dBZi, gamma, mu)
-                % various preprocessing steps to calculate dual-pol variables
-
-                % N = reshape(N, [], obj.nBins);
-                N1 = (obj.D.^(mu) .* exp(-gamma*obj.D));
-                % N1 = repmat(N1, [1, 1])
-                Zhh = 10^(calcZhh(obj, N1, dpp)/10);
-                % Zvv = calcZvv(obj, N1, dpp);
-                % Zhh = 4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A2 + abs(dpp.fb-dpp.fa).^2.*dpp.A4).*N1);
-                % Zvv = 4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A1 + abs(dpp.fb-dpp.fa).^2.*dpp.A3).*N1);
-                % keyboard
-
-                
-
-                N0 = 10^(dBZi/10)./(Zhh);
-
-                N = N0(:) .* (obj.D.^(mu) .* exp(-gamma*obj.D));
-            end
-            function err = calcErr(obj, dpp, dBZi, Zdri, N, gamma, mu)
-                % err = 1;
-                % keyboard
-                % b = obj.D;
-                % r = 0.9951 + 0.02510*obj.D - 0.03644*obj.D.^2 + 0.005303*obj.D.^3 - 0.0002492*obj.D.^4;
-                % a = obj.D.*r;
-
-                % obj.D = (a.*b.^2).^(1/3);
-                Zhh2 = calcZhh(obj, N, dpp);
-                Zvv2 = calcZvv(obj, N, dpp);
-                % Zhh2 = 10*log10(4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 ).*N, 2))
-                % Zvv2 = 10*log10(4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fa).^2 ).*N, 2))
-                % Zdr = Zhh2 - Zvv2;
-
-                % keyboard
-                dZdr = Zhh2 - Zvv2 - Zdri;
-                err = abs(dZdr);
-                
-            end
-        end
-
-        function obj = initFromDm(obj, Z, Zdr, Dm)
-            % in: Z in dBZ, Zdr in dBz
-            % out: N in m^-3 mm^-1
-            % keyboard
-            inds = find(~isinf(Z));
-            [ix, iy, iz] = ind2sub(size(Z), inds);
-            mu = NaN(size(Z));
-            gamma = NaN(size(Z));
-            if obj.rngToggle
-                rng(1); % for reproducibility
-            end
-            % keyboard
-            obj.dpp = obj.dualPolPreprocessing(obj.lambda);
-            
-            
-            
-            
-            fun = @(x) calcErr(obj, obj.dpp, Z, Zdr, Dm, initN(obj, obj.dpp, Z, x(1), x(2)), x(1), x(2));
-            gammai = min(3./(Zdr),12); % initial guess for gamma
-            mui = -0.016*gammai.^2 + 1.213*gammai - 1.957;% initial guess for mu
-            
-            % keyboard
-            [x,~] =  fminsearchbnd(fun, [gammai, mui], [0, -2], [20, 15]);
-  
-            %                                                           gamma, mu
-            % obj.N(ix(i), iy(i), iz(i), :) = initN(obj, obj.dpp, Z(ind), x(1), x(2));
-            
-            mu = x(2);
-            gamma = x(1);
-            % keyboard
-            obj.mu = mu;
-            obj.gamma = gamma;
-            obj.N00 = getN0(obj, obj.dpp, Z, gamma, mu);
-            if isempty(obj.N)
-                obj.N = zeros(numel(obj.xgrid), numel(obj.ygrid), numel(obj.zgrid), numel(obj.D));
-            end
-            obj.N(end, end, end, :) = obj.N00.*obj.D.^obj.mu.*exp(-obj.gamma.*obj.D);
-
-            
-
-            function N0 = getN0(obj, dpp, dBZi, gamma, mu)
-                % various preprocessing steps to calculate dual-pol variables
-                
-                % keyboard
-                
-                mu = mu(:);
-                gamma = gamma(:);
-
-
-                %! overriding mu
-                % mu = zeros(size(gamma));
-                % mu(isnan(gamma)) = NaN;
-                % mu = -0.0201*gamma.^2 + 0.902*gamma - 1.78;
-
-
-                % N = reshape(N, [], obj.nBins);
-                N1 = (obj.D.^(mu) .* exp(-gamma.*obj.D));
-                % N1 = repmat(N1, [1, 1])
-                Zhh = calcZhh(obj, N1, dpp);
-
-                N0 = 10.^(dBZi(:)/10)./10.^(Zhh(:)/10);
-                N0 = reshape(N0, size(obj.mu));
-            end
-
-            function [N] = initN(obj, dpp, dBZi, gamma, mu)
-                % various preprocessing steps to calculate dual-pol variables
-
-                % N = reshape(N, [], obj.nBins);
-                N1 = (obj.D.^(mu) .* exp(-gamma*obj.D));
-                % N1 = repmat(N1, [1, 1])
-                Zhh = 10^(calcZhh(obj, N1, dpp)/10);
-                % Zvv = calcZvv(obj, N1, dpp);
-                % Zhh = 4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A2 + abs(dpp.fb-dpp.fa).^2.*dpp.A4).*N1);
-                % Zvv = 4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A1 + abs(dpp.fb-dpp.fa).^2.*dpp.A3).*N1);
-                % keyboard
-
-                
-
-                N0 = 10^(dBZi/10)./(Zhh);
-
-                N = N0(:) .* (obj.D.^(mu) .* exp(-gamma*obj.D));
-            end
-            function err = calcErr(obj, dpp, dBZi, Zdri, Dm, N, gamma, mu)
-                % err = 1;
-                % keyboard
-                % b = obj.D;
-                % r = 0.9951 + 0.02510*obj.D - 0.03644*obj.D.^2 + 0.005303*obj.D.^3 - 0.0002492*obj.D.^4;
-                % a = obj.D.*r;
-
-                % obj.D = (a.*b.^2).^(1/3);
-                Zhh2 = calcZhh(obj, N, dpp);
-                Zvv2 = calcZvv(obj, N, dpp);
-                % Zhh2 = 10*log10(4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fb).^2 ).*N, 2))
-                % Zvv2 = 10*log10(4*obj.lambda.^4./(pi^4*abs(obj.Kw).^2)*trapz(obj.D,(abs(dpp.fa).^2 ).*N, 2))
-                % Zdr = Zhh2 - Zvv2;
-
-                % keyboard
-                dZdr = Zhh2 - Zvv2 - Zdri;
-                [~,dmind]=max(N);
-                Dm2 = obj.D(dmind);
-                err = abs(abs(dZdr) + 10*abs((Dm2 - Dm)));
-                
-            end
-        
         end
 
         %% get methods for reflectivity
@@ -498,24 +175,49 @@ classdef exmiras < thermo
             % out: horizontal reflectivity in dBZ
             % keyboard
             % dpp = obj.dualPolPreprocessing(obj.lambda);
-            Zhh = obj.calcZhh(obj.N, obj.dpp);
+            Zhh = zeros(size(obj.N, [1:3]));
+            inds = find(nansum(obj.N,4));
+            for i = 1:length(inds)
+                ind = inds(i);
+                [xi, yi, zi] = ind2sub(size(obj.N, [1:3]), ind);
+                
+                Zhh(ind) = obj.ra.calcZhh(squeeze(obj.N(xi,yi,zi,:)));
+            end
+            % Zhh = obj.ra.calcZhh(obj.N);
+
+
         end
         function Zvv = get.Zvv(obj)
             % in: D in mm
             % out: vertical reflectivity in dBZ
-            % dpp = obj.dualPolPreprocessing(obj.lambda);
-            Zvv = obj.calcZvv(obj.N, obj.dpp);
+            Zvv = zeros(size(obj.N, [1:3]));
+            inds = find(nansum(obj.N,4));
+            for i = 1:length(inds)
+                ind = inds(i);
+                [xi, yi, zi] = ind2sub(size(obj.N, [1:3]), ind);
+                Zvv(ind) = obj.ra.calcZvv(squeeze(obj.N(xi,yi,zi,:)));
+            end
         end
         function Zdr = get.Zdr(obj)
             Zdr = obj.Zhh - obj.Zvv;
         end
         function rhohv = get.rhohv(obj)
-            % dpp = obj.dualPolPreprocessing(obj.lambda);
-            rhohv = obj.calcRhohv(obj.N, obj.dpp);
+            rhohv = zeros(size(obj.N, [1:3]));
+            inds = find(nansum(obj.N,4));
+            for i = 1:length(inds)
+                ind = inds(i);
+                [xi, yi, zi] = ind2sub(size(obj.N, [1:3]), ind);
+                rhohv(ind) = obj.ra.calcRhohv(squeeze(obj.N(xi,yi,zi,:)));
+            end
         end
         function kdp = get.kdp(obj)
-            % dpp = obj.dualPolPreprocessing(obj.lambda);
-            kdp = obj.calcKdp(obj.N, obj.dpp);
+            kdp = zeros(size(obj.N, [1:3]));
+            inds = find(nansum(obj.N,4));
+            for i = 1:length(inds)
+                ind = inds(i);
+                [xi, yi, zi] = ind2sub(size(obj.N, [1:3]), ind);
+                kdp(ind) = obj.ra.calcKdp(squeeze(obj.N(xi,yi,zi,:)));
+            end
         end
 
         %% rain rate based on reflectivity
@@ -537,49 +239,19 @@ classdef exmiras < thermo
             % set up change in number concentration            
             dNt = reshape(obj.N, [], obj.nBins).*(reshape(obj.dDevap, [], obj.nBins) ./ (obj.Dw));            
             dN = dNt;
-            % 
-            % keyboard
+         
             dN(:,1:end-1) = (dN(:,1:end-1)-dNt(:,2:end));
             dN = reshape(dN, [size(obj.T), obj.nBins]);
 
-            % % set up change in number concentration 
-            % dDevap = obj.dDevap; 
-            % % dDevap(obj.N == 0) = 0; % no change in droplet size if no droplets present
-            % inds = find((nansum(obj.N,4)));
-            % [xi, yi, zi] = ind2sub(size(obj.T), inds);
-            % dN = zeros(size(obj.N));
-            % % keyboard
-            % for ii = 1:numel(inds)
-            %     % keyboard
-            %     % try
-            %     %     fDSD = griddedInterpolant(sort(obj.D-squeeze(dDevap(xi(ii),yi(ii),zi(ii),:))'), squeeze(obj.N(xi(ii),yi(ii),zi(ii),:)), 'linear');
-            %     % catch
-            %     %     keyboard
-            %     % end
-            %     % for jj = 1:obj.nBins
-            %     %     shiftedDSD(jj) = integral(@(x) fDSD(x), obj.De(jj), obj.De(jj+1));
-            %     % end
-            %     shiftedDSD = interp1(obj.D-squeeze(dDevap(xi(ii),yi(ii),zi(ii),:))', squeeze(obj.N(xi(ii),yi(ii),zi(ii),:)), obj.D, 'linear', 'extrap');
-            %     scaler = trapz(obj.D, shiftedDSD)/trapz(obj.D, squeeze(obj.N(xi(ii),yi(ii),zi(ii),:)));
-            %     shiftedDSD = shiftedDSD./scaler;
-            %     dN(xi(ii), yi(ii), zi(ii),:) = squeeze(obj.N(xi(ii),yi(ii),zi(ii),:))' - shiftedDSD;
-                
-            % end
             dN(obj.N+dN<0) = -obj.N(obj.N+dN<0); % fix overflowing values.
-            % % dN = smooth(dN, 0.1, 'loess', 4); % smooth out the dN values
-            % keyboard
-            % tic
+         
             inds = find((nansum(obj.N,4)));
             [xi, yi, zi] = ind2sub(size(obj.T), inds);
-            % dN = zeros(size(obj.N));
-            % keyboard
-            % tic
-            for ii = 1:numel(inds)
-                dN(xi(ii), yi(ii), zi(ii),:) = filloutliers(squeeze(dN(xi(ii),yi(ii),zi(ii),:)),'linear','movmedian', 3);
-            end
-            % toc
-            
-            % keyboard
+         
+            % for ii = 1:numel(inds)
+            %     dN(xi(ii), yi(ii), zi(ii),:) = filloutliers(squeeze(dN(xi(ii),yi(ii),zi(ii),:)),'linear','movmedian', 3);
+            % end
+         
         end
 
         % function dN = get.dNadvect(obj)
@@ -589,12 +261,9 @@ classdef exmiras < thermo
         function dN = get.dNfallout(obj)
             %% get change in number concentration due to fallout
             % calculate the 'true' vertical motion of droplets by subtracting terminal velocity from vertical velocity
-            % keyboard
             wTrue = reshape(obj.w(:) - obj.vt, [size(obj.w), length(obj.vt)]);
             dz = wTrue*obj.dt;
             
-            % keyboard
-
             %% calculate fraction of droplets that fall out/pushed upward
             % positive values indicate upward motion, negative values indicate downward motion
             r = dz./repmat(permute(repmat(gradient(obj.zgrid), [numel(obj.xgrid),1,numel(obj.ygrid)]), [3,1,2]), [ones(1,numel(size(obj.w))),length(obj.vt)]);
@@ -672,26 +341,13 @@ classdef exmiras < thermo
                 Ni = repmat(squeeze(obj.N(i,j,k,:)), [1,size(obj.N,4)]);
                 Nj = repmat(squeeze(obj.N(i,j,k,:))', [size(obj.N,4),1]);
 
-                % K = pi*E(1:149,150)'.*(obj.D(150)/2 + obj.D(1:149)/2).^2.*abs(obj.vt(150)-obj.vt(1:149));
                 dmij = triu(obj.rhol*4*pi/3* ... %kg/
                     pi*((di+dj)/2).^2.*abs(vj-vi).* ... /s
                     (di/2).^3.*Ni.*Nj.*obj.E);
-
-                % keyboard
                 dmj = trapz(obj.D, dmij, 1); % mass gained per droplet 
                 dmi = trapz(obj.D, dmij, 2); %mass lost per droplet bin 
                 dmi = dmi * sum(dmj)./sum(dmi); % mass lost per droplet bin
 
-                % keyboard
-                % fig = figure("Units", "inches", "Position", [0,0,3.75,3]);
-                % plot(obj.D, squeeze(dmj)./obj.M*obj.dt, 'r')
-                % hold on 
-                % plot(obj.D, -squeeze(dmi')./obj.M*obj.dt, 'b')
-                % legend('number concentration gained', 'number concentration lost', 'Location', 'southeast')
-                % xlabel('D [mm]')
-                % ylabel('dN [m^{-3} mm^{-1}]')
-                % xscale('log')
-                % print2(fig, './dNcoal.png')
                 dN(i,j,k,:) = (dmj-dmi')./obj.M*obj.dt; % number concentration gained per droplet bin
             end
 
@@ -757,40 +413,26 @@ classdef exmiras < thermo
             %% calculate rates of change
             operators = ["dNevap", "dNfallout", "dNcoal"];
             
-            % keyboard
             dT = obj.dTevap;
             dm = obj.dmevap;
-            % dN = zeros(size(obj.N));
-     
-            % dNevap = obj.dNevap;
+
             obj.N0 = obj.N;
 
             for ii = 1:length(operators)
                 % keyboard
                 operatorToggle = char(operators(ii)); operatorToggle = [operatorToggle(3:end), 'Toggle'];
                 if obj.(operatorToggle)
+                   
                     obj.N = obj.N + obj.(operators(ii));
                 end
             end
 
-            % dNfallout = obj.dNfallout;
-            % dNcoal = obj.dNcoal;
-            % dN = obj.dNevap + obj.dNfallout + obj.dNcoal;
-
-            
-            
-            % obj.N(obj.N+dN<0)
-            % obj.dNevap(obj.N+dN<0)
-            
-            % keyboard
-            % obj.N = obj.N + dN;
             obj.N(obj.N >-1e-4 & obj.N<0) = 0; % remove negative values
 
             if any(obj.T(:)<abs(dT(:))) || any(obj.mv(:) < abs(dm(:))) || any(obj.N<0,"all")
-                % keyboard
                 obj.dt = obj.dt/2;
                 warning('Time step too large, reducing to %d', obj.dt)
-                % obj.integrate;
+                
                 return
 
             end

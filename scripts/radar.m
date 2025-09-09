@@ -60,37 +60,29 @@ classdef radar < handle
 
         %% calculators for reflectivity
         function Zhh = calcZhh(radar, N)
-            % in: N in m^-3 mm^-1, D in mm
+            % in: N in m^-3 mm^-1 along the 
             % out: horizontal reflectivity in dBZ
-            % keyboard
-            N = reshape(N, [], radar.nBins);
-        
 
+            N = reshape(N, [], radar.nBins);
             Zhh = 10*log10(...
                 trapz(radar.D, radar.dpp.reflh.*N, 2) ...
             );
-           
-            % Zhh = Zhh;
-           
         end
 
         function Zvv = calcZvv(radar, N)
             % in: N in m^-3 mm^-1, D in mm
             % out: vertical reflectivity in dBZ
+            
             N = reshape(N, [], radar.nBins);
-            % dpp = radar.dualPolPreprocessing(radar.lambda);
-           
             Zvv = 10*log10(...
                 trapz(radar.D, radar.dpp.reflv.*N, 2) ...
             );
-           
-            % Zvv = Zvv;
-           
         end
 
         function Zdr = calcZdr(radar, N)
             % in: N in m^-3 mm^-1, D in mm
             % out: differential reflectivity in dB
+
             N = reshape(N, [], radar.nBins);
             Zhh = radar.calcZhh(N);
             Zvv = radar.calcZvv(N);
@@ -98,6 +90,8 @@ classdef radar < handle
         end
 
         function rhohv = calcRhohv(radar, N)
+            % in: N in m^-3 mm^-1, D in mm
+            % out: copolar correlation coefficient (unitless)
             N = reshape(N, [], radar.nBins);
             
             a = radar.dpp.rhohva;
@@ -115,6 +109,8 @@ classdef radar < handle
         end
             
         function kdp = calcKdp(radar, N)
+            % in: N in m^-3 mm^-1, D in mm
+            % out: specific differential phase in deg/km
             N = reshape(N, [], radar.nBins);
             kdp = trapz(radar.D, N.*radar.dpp.kdpl,2);
         end
@@ -161,7 +157,6 @@ classdef radar < handle
 
             radar.dpp = radar.dualPolPreprocessing(radar.lambda);
             
-
             function lambdaOut = convertLambda(lambdaIn)
                 if isa(lambda, 'str') | isa(lambda, 'char')
                     bandName = ["S",    "C",    "X",        "Ku",       "Ka"       ];

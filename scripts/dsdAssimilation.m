@@ -100,6 +100,7 @@ classdef dsdAssimilation < handle
         
 
         function obj = estimateRadarProfiles(obj)
+            %% OBSOLETE, USE estimateSingleRadarProfile INSTEAD AND THE DA METHODS BELOW
 
             %% initialize the interpolants
  
@@ -143,26 +144,19 @@ classdef dsdAssimilation < handle
 
 
         function varargout = estimateSingleRadarProfile(obj, Zhh, Zdr, Dm)
+            % this is our backwards model that estimates the DSD profile.
+            % in: Zhh in dBZ, Zdr in dB, Dm in mm for the top of the domain
+            % out: dN, Zhhp, Zdrp, (dnint)
 
             %% load the Ntop LUT and interpolate to get the Ntop
             f=load('../data/LUTs/NtopLUTs.mat', 'NtopLUT', 'ZhhGrid', 'ZdrGrid', 'DmGrid');
             Ntopf = griddedInterpolant({10.^(f.ZhhGrid./10), f.ZdrGrid, f.DmGrid}, f.NtopLUT.(obj.bandName), 'linear', 'linear');
             Ntop = Ntopf(10.^(Zhh./10), Zdr, Dm);
-            % Ntopf = griddedInterpolant({f.ZhhGrid, f.ZdrGrid, f.DmGrid}, f.NtopLUT.(obj.bandName), 'nearest', 'linear');
-            % Ntop = Ntopf(Zhh, Zdr, Dm);
-            
 
             %% initialize the difference kernel interpolant
             detaf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.deta.(obj.bandName), 'linear', 'linear');
 
-
-
-            % np = NaN(numel(obj.zgrid), numel(obj.DmGrid), 250);
-
-
-            
             %% calculate the difference kernel (detakk) at each height, RH
-            % keyboard
             detakk = squeeze(detaf(...
                 Zdr.*ones(size(obj.RHProfileObs)), ...
                 obj.RHProfileObs, ...
@@ -174,22 +168,20 @@ classdef dsdAssimilation < handle
 
             % integrate the difference kernel to get the DSD at each height
             dnint = flipud(cumtrapz(obj.zgrid, detakk.*max(Ntop3s, [], 2), 1));
-            % keyboard
             dN = Ntop3s + dnint;
-            dN(dN<0) = 0; % make sure we don't have negative DSDs
+            dN(dN<0) = 0; % make sure we don't have negative DSDs (happens in rare cases)
 
-            ra = radar(obj.bandName);
-            
+            %% calculate the radar observables from the DSD at each height
             for kk = 1:numel(obj.zgrid)
-                Zhhp(kk) = ra.calcZhh(dN(kk,:));
-                Zdrp(kk) = ra.calcZdr(dN(kk,:));
+                Zhhp(kk) = obj.ra.calcZhh(dN(kk,:));
+                Zdrp(kk) = obj.ra.calcZdr(dN(kk,:));
             end
 
+            %% return the requested outputs
             if nargout == 3
                 varargout = {dN, Zhhp, Zdrp};
             elseif nargout == 4
                 varargout = {dN, Zhhp, Zdrp, dnint};
-           
             end
 
         end
@@ -219,11 +211,7 @@ classdef dsdAssimilation < handle
                 mu(inds(i)) = x(2);
                 gamma(inds(i)) = x(1);
                 N0(inds(i)) = getN0(da.ra, da.ra.dpp, Z, gamma, mu);
-                % N0 = N0;
             end
-            % radar.mu = mu;
-            % radar.gamma = gamma;
-
             function N0 = getN0(radar, dpp, dBZi, gamma, mu)
                 % various preprocessing steps to calculate dual-pol variables
                 mu = mu(:);
@@ -256,8 +244,6 @@ classdef dsdAssimilation < handle
             % in: Z in dBZ, Zdr in dBz
             % out: N in m^-3 mm^-1
 
-            % keyboard
-
             if any(isnan([Z, Zdr, Dm]))
                 N = zeros(size(da.ra.D));
                 N0 = NaN;
@@ -266,93 +252,53 @@ classdef dsdAssimilation < handle
                 return
             end
 
-
-            
             inds = find(~isinf(Z));
             [ix, iy, iz] = ind2sub(size(Z), inds);
             mu = NaN(size(Z));
             gamma = NaN(size(Z));
             
             fun = @(x) calcErr(da.ra, da.ra.dpp, Z, Zdr, Dm, initN(da.ra, da.ra.dpp, Z, x(1), x(2)), x(1), x(2));
-
-            % keyboard
             if ~da.ra.rngToggle
                 gammai = max(min(6./(Zdr),12) + (2*rand()-1), 0); % initial guess for gamma
                 % mui = -0.016*gammai.^2 + 1.213*gammai - 1.957 + min(max((8*rand()-4), -2), 15);% initial guess for mu
                 mui = -0.0201*gammai.^2 + 0.902*gammai - 1.78 + min(max((2*rand()-1), -2), 15);% initial guess for mu
                 [x,~] =  fminsearchbnd(fun, [gammai, mui], [0, -2], [20, 15]);
             else
-
+                % ensemble approach to test convergence around above solution
                 for ii = 1:20
                     gammai = randi(15);
                     mui = randi(12)-2;
                     [xt,~] =  fminsearchbnd(fun, [gammai, mui], [0, -2], [20, 15]);
                     x(ii, :) = xt;
                 end
-
                 x = mode(x, 1);
-
             end
-            
-            % keyboard
-            
 
             mu = x(2);
             gamma = x(1);
             N0 = getN0(da.ra, da.ra.dpp, Z, gamma, mu);
             N = N0.*da.ra.D.^mu.*exp(-gamma.*da.ra.D);
 
-            
-
             function N0 = getN0(radar, dpp, dBZi, gamma, mu)
-                % various preprocessing steps to calculate dual-pol variables
-                
-                % keyboard
-                
+                % find the initial N0 based on Zhh, gamma, and mu
                 mu = mu(:);
                 gamma = gamma(:);
-
-
-                %! overriding mu
-                % mu = zeros(size(gamma));
-                % mu(isnan(gamma)) = NaN;
-                % mu = -0.0201*gamma.^2 + 0.902*gamma - 1.78;
-
-
-                % N = reshape(N, [], radar.nBins);
                 N1 = (radar.D.^(mu) .* exp(-gamma.*radar.D));
-                % N1 = repmat(N1, [1, 1])
                 Zhh = calcZhh(radar, N1);
-
                 N0 = 10.^(dBZi(:)/10)./10.^(Zhh(:)/10);
-                % N0 = reshape(N0, size(radar.mu));
             end
 
             function [N] = initN(radar, dpp, dBZi, gamma, mu)
-                % keyboard
-                % various preprocessing steps to calculate dual-pol variables
-
-                % N = reshape(N, [], radar.nBins);
+                % find the initial N based on Zhh, gamma, and mu
                 N1 = (radar.D.^(mu) .* exp(-gamma*radar.D));
-                % N1 = repmat(N1, [1, 1])
                 Zhh = 10.^(radar.calcZhh(N1)/10);
-                % Zvv = calcZvv(radar, N1, dpp);
-                % Zhh = 4*radar.lambda.^4./(pi^4*abs(radar.Kw).^2)*trapz(radar.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A2 + abs(dpp.fb-dpp.fa).^2.*dpp.A4).*N1);
-                % Zvv = 4*radar.lambda.^4./(pi^4*abs(radar.Kw).^2)*trapz(radar.D,(abs(dpp.fb).^2 - 2*real(conj(dpp.fb).*(dpp.fb-dpp.fa)).*dpp.A1 + abs(dpp.fb-dpp.fa).^2.*dpp.A3).*N1);
-                % keyboard
-
-                
-
                 N0 = 10^(dBZi/10)./(Zhh);
-
                 N = N0(:) .* (radar.D.^(mu) .* exp(-gamma*radar.D));
             end
             function err = calcErr(radar, dpp, dBZi, Zdri, Dm, N, gamma, mu)
                 % calculate the error between the observed and simulated Zhh and Zdr
-
                 Zhh2 = radar.calcZhh(N);
                 Zvv2 = radar.calcZvv(N);
-
                 dZdr = Zhh2 - Zvv2 - Zdri;
                 [~,dmind]=max(N);
                 Dm2 = radar.D(dmind);
@@ -361,19 +307,15 @@ classdef dsdAssimilation < handle
             end
         
         end
-        function [N] = getNFromN0MuGamma(obj, N0, mu, gamma)
-            % in: N0 in m^-3 mm^-1, mu, and gamma mm^-1 
+        function [N] = getNFromN0MuLambda(obj, N0, mu, lambda)
+            % in: N0 in m^-3 mm^-1, mu, and lambda mm^-1 
             % out: N in m^-3 mm^-1
             
-            N = N0(:) .* (obj.ra.D.^(mu(:))) .* exp(-gamma(:).*obj.ra.D);
+            N = N0(:) .* (obj.ra.D.^(mu(:))) .* exp(-lambda(:).*obj.ra.D);
             N(isnan(N)) = 0;
         end
-
-        % function N = getNFromRefZdrDm(obj, Zhh, Zdr, Dm)
     end
 
-    %% methods used to construct the various LUTs, 
-    %% basically Static, but kept here and hooked into class properties for convenience
     methods 
         function bakeDSDs(obj)
             % function that calculates the DSD at the top of the rainshaft for many combinations of Zhh, Zdr, Dm
@@ -437,7 +379,10 @@ classdef dsdAssimilation < handle
             save('../data/LUTs/NtopLUTs.mat', 'NtopLUT', 'ZhhGrid', 'ZdrGrid', 'DmGrid')
 
         end
+    end
 
+    %% data assimilation methods
+    methods
         function varargout=profileOptimizer(obj, ZhhProfileObs, ZdrProfileObs)
             % function that optimizes a profile of simulated Zhh and Zdr to find the best fitting DSD.
             % inputs: ZhhProfileObs, ZdrProfileObs: observed profiles of Zhh and Zdr to fit
@@ -447,8 +392,8 @@ classdef dsdAssimilation < handle
 
             
             options = optimset();
-            options.TolX = 1e-1;
-            options.TolFun = 1e-1;
+            options.TolX = 1e-2;
+            options.TolFun = 1e-2;
         
             %% run the assimilation optimization routine
             % initial guess: median of the observed profiles, and 0.7 mm for D
@@ -488,8 +433,10 @@ classdef dsdAssimilation < handle
                 Dm = x(3); % mm
                 % function to optimize the profile of the DSD
                 [dN, Zhhp, Zdrp] = obj.estimateSingleRadarProfile(Zhh, Zdr, Dm);
-                % keyboard
-                errorRaw = (Zhhp(:) - ZhhProfileObs).*ZhhProfileObs./max(ZhhProfileObs(:));
+                
+                ZhhProfileObs = 10.^(ZhhProfileObs./10);
+                Zhhp = 10.^(Zhhp./10);
+                errorRaw = (Zhhp(:) - ZhhProfileObs).*(ZhhProfileObs./max(ZhhProfileObs(:))).^2;
                 errorMode = mean(errorRaw, 2, 'omitnan');
                 errorRawZdr = Zdrp(:) - ZdrProfileObs;
                 errorModeZdr = mean(errorRawZdr, 2, 'omitnan');
@@ -513,8 +460,6 @@ classdef dsdAssimilation < handle
                 varargout = {N};
             end
         end
-
-
     end
 
     methods 

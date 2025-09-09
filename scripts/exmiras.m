@@ -330,8 +330,7 @@ classdef exmiras < thermo
             for ii = 1:numel(inds)
                 ind = inds(ii);
                 [i,j,k] = ind2sub(size(obj.N, [1:3]), ind);
-                % keyboard
-                % mi = repmat(obj.M', [1,size(obj.N,4)]);
+
                 % species j collects species i. Integrate along columns
                 % i.e. along the rows are the donor droplets, along the columns are the absorbing droplets
                 vi = repmat(obj.vt', [1,size(obj.N,4)]);
@@ -356,6 +355,7 @@ classdef exmiras < thermo
 
 
         function vol = get.vol(obj)
+            % get the volume of each grid cell
             dy = repmat(gradient(obj.ygrid), [numel(obj.xgrid), 1, numel(obj.zgrid)]);
 
             dx = repmat(gradient(obj.xgrid)', [1, numel(obj.ygrid), numel(obj.zgrid)]);
@@ -365,40 +365,32 @@ classdef exmiras < thermo
         end
 
         function dm = get.dmevap(obj)
+            % get change in mass due to evaporation
             
             dNevapf = reshape(obj.dNevap, [], obj.nBins);
             
             dm = dNevapf .* obj.M;
             dm = reshape(dm, [size(obj.N)]);
             dm = trapz(obj.D,dm, numel(size(dm)));
-            % trapz(a,v,)     
-            % dDevap = reshape(obj.dDevap, [], obj.nBins);
-            % D0 = repmat(obj.D, [size(dDevap,1),1]);
-            % D1 = D0 + dDevap;
-
-            % v0 = 4/3*pi*(D0/2/1000).^3; 
-            % v1 = 4/3*pi*(D1/2/1000).^3;
-            % m0 = obj.rhol*v0;
-            % m1 = obj.rhol*v1;
-
-            % dm = obj.dNevap.*reshape((m0 - m1), size(obj.dDevap));
-            % dm = sum(dm, numel(size(dm)));
-
         end
 
         function dT = get.dTevap(obj)    
             dQ = obj.dHevap*obj.dmevap;
             dT = dQ./(obj.rhoa*obj.cp); 
         end
-
-        
     end
 
     %% constructor
     methods
         function obj = integrate(obj)
+            %% integrate one time step of the model
+            % assumes that the state variables (T, p, pv, N, u, v, w) are already initialized
+            % assumes that the dsd (N) is already initialized
+            % iteratively calls the dN methods and updates the state variables
+            
+
+            % initialize wind fields if not provided
             if obj.nSteps == 0
-                % keyboard
                 if isempty(obj.w)
                     obj.w = zeros(size(obj.T));
                 end
@@ -413,28 +405,27 @@ classdef exmiras < thermo
             %% calculate rates of change
             operators = ["dNevap", "dNfallout", "dNcoal"];
             
+            % calculate dT and dm first, saving values for later 
             dT = obj.dTevap;
             dm = obj.dmevap;
 
+            % record previous N before dN calculations
             obj.N0 = obj.N;
 
+            % calculate dN from each enabled operator
             for ii = 1:length(operators)
-                % keyboard
                 operatorToggle = char(operators(ii)); operatorToggle = [operatorToggle(3:end), 'Toggle'];
                 if obj.(operatorToggle)
-                   
                     obj.N = obj.N + obj.(operators(ii));
                 end
             end
 
-            obj.N(obj.N >-1e-4 & obj.N<0) = 0; % remove negative values
+            obj.N(obj.N >-1e-4 & obj.N<0) = 0; % remove slightly negative values
 
+            %% check for stability
             if any(obj.T(:)<abs(dT(:))) || any(obj.mv(:) < abs(dm(:))) || any(obj.N<0,"all")
                 obj.dt = obj.dt/2;
-                warning('Time step too large, reducing to %d', obj.dt)
-                
-                return
-
+                error('Something went wrong, make sure dt is small enough and all state variables are set and in the correct units.')
             end
 
             %% update state variables
@@ -443,16 +434,19 @@ classdef exmiras < thermo
                 obj.pv = (obj.mv - dm).*obj.Rv.*obj.T/100;
             end
 
-            %% update the parent field
+            %% update the source number concentration (i.e., at cloud base.)
             if obj.nSteps < obj.st
                 obj.N(obj.NP > 0) = obj.NP(obj.NP > 0);
             end
 
-            %% update the number of steps
+            %% update the number of steps taken
             obj.nSteps = obj.nSteps + 1;
         end
 
         function obj = exmiras(obj)
+            %% constructor for exmiras class, inherits from thermo class
+            % builds the droplet size distribution, terminal velocity, 
+            % radar, and da classes
 
             % calculate dropsize distribution
             obj.De = logspace(log10(0.1),log10(obj.dMax),obj.nBins+1);

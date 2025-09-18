@@ -4,27 +4,43 @@
 % characterize the evolution of the DSD as a function of initial Dm, Zdr,
 % and RH. The reflectivity is solved in the forward model in `dsdAssimilation.m`
 
-% To generate the simulations, run the following loop. This will take about 4 weeks at this resolution.
+% To generate the simulations, run the following loop. 
 
 % To save the LUTs, run the code beginning at line 34.
-zgrid = 25:50:2025;
+zgrid = 25:100:2025;
 lapseRate = -6.5; % K/km
 
-for Dm = 0.1:0.1:1.8
-    for zdr = 0.3:0.3:3
-        for RH = 0.1:0.05:0.95
-            for bandName = {'S', 'C', 'X'}
-                temp = @(z) lapseRate*z/1000 + 290;
-                pres = @(z) 1000*exp(-z/1000/8.4);
 
-                bandName = bandName{1};
+% mu vs. Lambda bounds.
+polytop = [2.3277, -0.9189];
+polybot = [0.2796, -2.0];
+
+numSteps = 20;
+
+Zhh = 30;
+da = dsdAssimilation('S');
+
+for Zhh = 30%[10, 20, 30:5:60]
+    for lambda = linspace(0,20, numSteps)
+        muTop = min(polyval(polytop, lambda), 15);
+        muBot = polyval(polybot, lambda);
+        muRange = linspace(muBot, muTop, numSteps);
+        for mu = muRange
+            N0 = da.getN0FromZhhMuLambda(Zhh, mu, lambda);
+            for RH = 0.2:0.2:1
+
+                % set temperature and pressure profiles
+                temp = @(z) lapseRate*z/1000 + 295;
+                pres = @(z) 1000*exp(-z/1000/8.4);
+                
                 % T0m = 290; % K
-                saveDir = '~/work/exmirasData/LUTs-';
+                saveDir = '~/work/exmirasData/LUTs-hires-N0MuLambda-';
                 T = temp(zgrid);
                 p = pres(zgrid);
-                runEXMIRAS(40, zdr, Dm, bandName, temp(zgrid), pres(zgrid), ones(size(zgrid))*RH, saveDir, 'waterVaporInteraction', false)
+                runEXMIRAS(N0, mu, lambda,  temp(zgrid), pres(zgrid), ones(size(zgrid))*RH, saveDir, 'waterVaporInteraction', false)
+
+            
             end
-           
         end
     end
 end
@@ -35,11 +51,16 @@ return
 ZhhStart = 30;
 
 % load all of the files
-files = dir('~/work/exmirasData/LUTs-*');
+files = dir('~/work/exmirasData/LUTs-hires-N0MuLambda-*');
 files = {files.name};
 
 % loop over the minutes of simulation.
 for midx = [4,5,7,10,15]
+    N0 = [];
+    mu = [];
+    lambda = [];
+    RH = [];
+    deta = [];
     tic
 
     %% assign grids for the interpolant
@@ -49,54 +70,31 @@ for midx = [4,5,7,10,15]
     Ntop3 = NaN(numel(zdrgrid), numel(RHgrid), numel(Dmgrid), 250);
     Nbot3 = NaN(numel(zdrgrid), numel(RHgrid), numel(Dmgrid), 250);
 
-    deta =struct("S", NaN(numel(zdrgrid), numel(RHgrid), numel(Dmgrid), 250), ...
-                "C", NaN(numel(zdrgrid), numel(RHgrid), numel(Dmgrid), 250), ...
-                "X", NaN(numel(zdrgrid), numel(RHgrid), numel(Dmgrid), 250));
-
-    % loop over S-, C-, and X-band
-    for bandName = {'S', 'C', 'X'}
-        filesBand = files(contains(files, ['LUTs-', bandName{1}]));
-        for fname=filesBand
-            fileInfo.Dm = round(str2num(fname{1}(14:17)),1);
-            fileInfo.zdr = round(str2num(fname{1}(19:22)),1);
-            fileInfo.RH = round(str2num(fname{1}(24:27)),1);
-
-            if ~all([...
-                any(zdrgrid == fileInfo.zdr), ...
-                any(RHgrid == fileInfo.RH), ...
-                any(Dmgrid == fileInfo.Dm)])
-
-                continue
-            end
-            f = load(['~/work/exmirasData/', fname{1}]);
-
-            % calculate deta as (Nbot-Ntop)/dz/Ntop
-            Ntop = squeeze(f.ExmirasRun.N(midx,end,:));
-            Nbot = squeeze(f.ExmirasRun.N(midx,1,:));
-            Nbot(1) = Nbot(2);
-            deta.(bandName{1})(...
-                zdrgrid == fileInfo.zdr, ...
-                RHgrid == fileInfo.RH, ...
-                Dmgrid == fileInfo.Dm, ...
-            :) = (Nbot-Ntop)./2000/max(Ntop);
-
-            
-            Nbot3(...
-                zdrgrid == fileInfo.zdr, ...
-                RHgrid == fileInfo.RH, ...
-                Dmgrid == fileInfo.Dm, ...
-                :) = Nbot;
-        end
-
+    for fname=files
         
+        f = load(['~/work/exmirasData/', fname{1}]);
+
+        N0(end+1) = f.ExmirasRun.initVariables.N0;
+        mu(end+1) = f.ExmirasRun.initVariables.mu;
+        lambda(end+1) = f.ExmirasRun.initVariables.lambda;
+        RH(end+1) = mean(f.ExmirasRun.initVariables.RH);
+
+        % calculate deta as (Nbot-Ntop)/dz/Ntop
+        Ntop = squeeze(f.ExmirasRun.N(midx,end,:));
+        Nbot = squeeze(f.ExmirasRun.N(midx,1,:));
+        Nbot(1) = Nbot(2);
+        deta(end+1,:) = (Nbot-Ntop)./2000/max(Ntop);
+
     end
+
     fprintf('Finished midx = %d\n', midx)
-    save(sprintf('../data/LUTs/detaLUTs-hires-%1.0f.mat', midx), 'deta','zdrgrid', 'RHgrid', 'Dmgrid')
+    detaInterpolant = scatteredInterpolant(mu', lambda', RH', deta, 'linear', 'linear');
+    save(sprintf('../data/LUTs/detaLUTs-N0MuLambda-hires-%1.0f.mat', midx), 'deta','N0', 'mu', 'lambda', 'RH', "detaInterpolant")
     toc
 end
 
 %%% function to run the ideal simulation %%%
-function runEXMIRAS(dBZStart, zdr, Dm, bandName, T, p, RH, saveDir, varargin)
+function runEXMIRAS(N0, mu, lambda, T, p, RH, saveDir, varargin)
     tic
     % Run the ideal simulation                  
     %%! set up initial droplet size distribution
@@ -106,20 +104,16 @@ function runEXMIRAS(dBZStart, zdr, Dm, bandName, T, p, RH, saveDir, varargin)
     %% set up initial droplet size distribution
     ex.xgrid = [50];
     ex.ygrid = [50];
-    ex.zgrid = 25:50:2025;
+    ex.zgrid = 25:100:2025;
 
     sx = numel(ex.xgrid);
     sy = numel(ex.ygrid);
     sz = numel(ex.zgrid);
-    dBZi = dBZStart + rand(sx, sy, sz)*0;
-    Zdri = zdr + rand(sx, sy, sz)*0;
-    dBZi(:,:,1:size(dBZi,3)-1) = -inf;
-    Zdri(:,:,1:size(dBZi,3)-1) = 0;
-
-    ex = ex.initFromLambdaName(bandName);
-    % ex = ex.initFromReflectivity(dBZi, Zdri);
-    ex = ex.initFromDm(dBZStart, zdr, Dm);
-    ex.Zdr(end)
+    
+    ex.N = zeros(sx, sy, sz, ex.nBins);
+    ex = ex.initializeRadarSimulator('S');
+    ex.N(1,1,end,:) = ex.da.getNFromN0MuLambda(N0, mu, lambda);
+    % ex.Zdr(end)
     
 
     ex.NP = ex.N;
@@ -143,19 +137,23 @@ function runEXMIRAS(dBZStart, zdr, Dm, bandName, T, p, RH, saveDir, varargin)
 
     ex.dt = 0.5;
     % ex.st = 3600./ex.dt; 
-    ex.st = 1200./ex.dt; 
+    ex.st = 900./ex.dt; 
     
     % keyboard
 
 
     %% set storm time
     numSteps = ex.st+0;
-    variablesToSave = {'T', 'p', 'pv', 'qv', 'Zhh', 'Zvv', 'RR', 'rhohv', 'kdp', 'Zdr', 'theta'};
+    variablesToSave = {'T', 'p', 'pv', 'qv', 'RR', 'rhohv', 'kdp', 'theta'};
     ExmirasRun = struct();
     ExmirasRun.initVariables.p = p;
     ExmirasRun.initVariables.T = T;
     ExmirasRun.initVariables.pv = es(ex.T).*RH;
-    ExmirasRun.ID = sprintf('%s_%s_%s_%s_%s', bandName, "ideal", num2str(Dm, '%1.2f'), num2str(zdr, '%1.2f'), num2str(mean(RH), '%1.2f'));
+    ExmirasRun.initVariables.N0 = N0;
+    ExmirasRun.initVariables.mu = mu;
+    ExmirasRun.initVariables.lambda = lambda;
+    ExmirasRun.initVariables.RH = RH;
+    ExmirasRun.ID = sprintf('%1.3f_%1.3f_%1.3f_%1.3f', N0, mu, lambda, mean(RH));
 
     fprintf(ExmirasRun.ID)
 
@@ -199,7 +197,7 @@ function runEXMIRAS(dBZStart, zdr, Dm, bandName, T, p, RH, saveDir, varargin)
         for j = 1:numel(variablesToSave)
             ExmirasRun.(variablesToSave{j})(i,:) = squeeze(ex.(variablesToSave{j})(1,1,:));
         end
-        ExmirasRun.Zdr(i,:) = ex.Zhh(1,1,:)-ex.Zvv(1,1,:);
+        % ExmirasRun.Zdr(i,:) = ex.Zhh(1,1,:)-ex.Zvv(1,1,:);
 
         if mod(i, 120) == 0
             fprintf('saving dsd at time step %d\n', i)
@@ -207,24 +205,25 @@ function runEXMIRAS(dBZStart, zdr, Dm, bandName, T, p, RH, saveDir, varargin)
             ExmirasRun.dNevap(end+1,:,:) = squeeze(ex.dNevap(1,1,:,:));
             ExmirasRun.dNcoal(end+1,:,:) = squeeze(ex.dNcoal(1,1,:,:));
             ExmirasRun.dNfallout(end+1,:,:) = squeeze(ex.dNfallout(1,1,:,:));
-            ExmirasRun.gamma(end+1) = ex.gamma(1,1,end);
-            ExmirasRun.mu(end+1) = ex.mu(1,1,end);
-            ExmirasRun.N0(end+1) = ex.N00(1,1,end);
+            % keyboard
+            % ExmirasRun.gamma(end+1) = ex.gamma(1,1,end);
+            % ExmirasRun.mu(end+1) = ex.mu(1,1,end);
+            % ExmirasRun.N0(end+1) = ex.N00(1,1,end);
             % ExmirasRun.dN = squeeze(ex.dN(1,1,:,:
         end
 
         % stop integrating if the water vapor saturation is abov 98%
-        if all(ex.qv(1,1,:)>=0.98)
-            % remove all unused time steps
-            for j = 1:numel(variablesToSave)
-                ExmirasRun.(variablesToSave{j})(i+1:end,:) = [];
-            end
-            ExmirasRun.Zdr(i+1:end,:) = [];
+        % if all(ex.qv(1,1,:)>=0.98)
+        %     % remove all unused time steps
+        %     for j = 1:numel(variablesToSave)
+        %         ExmirasRun.(variablesToSave{j})(i+1:end,:) = [];
+        %     end
+        %     % ExmirasRun.Zdr(i+1:end,:) = [];
 
-            % end integration
-            fprintf('Water vapor saturation reached at time step %d\n', i)
-            break
-        end 
+        %     % end integration
+        %     fprintf('Water vapor saturation reached at time step %d\n', i)
+        %     break
+        % end 
     end
 
     % set up grids/save run

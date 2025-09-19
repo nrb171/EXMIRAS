@@ -1,6 +1,12 @@
 classdef dsdAssimilation < handle
     properties
         bandName = 'S';
+        D
+        De
+        Dw
+        nBins = 250;
+        dMax = 8; % mm
+
         
         zgrid = 25:50:2025;
         RHProfileObs = ones(1,41)*0.3;
@@ -22,9 +28,11 @@ classdef dsdAssimilation < handle
 
         Ntop
         deta
+        detaInterpolant
+        detaLUTs
 
         hires = true;
-        minuteIdx= 10
+        minuteIdx= 7
 
 
         %% other classes used
@@ -36,12 +44,19 @@ classdef dsdAssimilation < handle
     methods % dependent properties
 
         function deta = get.deta(obj)
-            if obj.hires
-                detat = load(sprintf('../data/LUTs/detaLUTs-hires-%1.0f.mat', obj.minuteIdx), 'deta');
-                deta = detat.deta;
+
+            if isempty(obj.detaLUTs)
+
+                if obj.hires
+                    detat = load(sprintf('../data/LUTs/detaLUTs-hires-%1.0f.mat', obj.minuteIdx), 'deta');
+                    deta = detat.deta;
+                else
+                    detat = load(sprintf('../data/LUTs/detaLUTs-%1.0f.mat', obj.minuteIdx), 'deta');
+                    deta = detat.deta;
+                end
+                obj.detaLUTs = deta;
             else
-                detat = load('../data/LUTs/detaLUTs-%1.0f.mat', 'deta');
-                deta = detat.deta;
+                deta = obj.detaLUTs;
             end
         end
 
@@ -56,111 +71,120 @@ classdef dsdAssimilation < handle
 
     methods % main methods
         
-        function obj = getNtop(obj)
+        % function obj = getNtop(obj)
 
-            % detaf = griddedInterpolant({zdrgrid, RHgrid, Dmgrid}, deta.(bandName), 'linear', 'extrap');
+        %     % detaf = griddedInterpolant({zdrgrid, RHgrid, Dmgrid}, deta.(bandName), 'linear', 'extrap');
 
-            %% Get Ntop for each combination of 
-            obj.ex = exmiras;
-            for zdr = obj.ZdrGrid
-                for Dm = obj.DmGrid
+        %     %% Get Ntop for each combination of 
+        %     obj.ex = exmiras;
+        %     for zdr = obj.ZdrGrid
+        %         for Dm = obj.DmGrid
                     
-                    % Run the ideal simulation                  
-                    %%! set up initial droplet size distribution
-                    % fprintf('T0m = %1.2f, humidity = %1.2f, dBZStart = %d, zdr = %1.2f\n', T0m, humidity, dBZStart, zdr)
-                    obj.ex.rngToggle = false;
-                    %% set up initial droplet size distribution
-                    obj.ex.xgrid = [50];
-                    obj.ex.ygrid = [50];
-                    obj.ex.zgrid = 25:50:2025;
+        %             % Run the ideal simulation                  
+        %             %%! set up initial droplet size distribution
+        %             % fprintf('T0m = %1.2f, humidity = %1.2f, dBZStart = %d, zdr = %1.2f\n', T0m, humidity, dBZStart, zdr)
+        %             obj.ex.rngToggle = false;
+        %             %% set up initial droplet size distribution
+        %             obj.ex.xgrid = [50];
+        %             obj.ex.ygrid = [50];
+        %             obj.ex.zgrid = 25:50:2025;
 
-                    sx = numel(obj.ex.xgrid);
-                    sy = numel(obj.ex.ygrid);
-                    sz = numel(obj.ex.zgrid);
-                    Zhhi = obj.ZhhProfileObs(end) + zeros(sx, sy, sz)*0;
-                    Zdri = obj.ZdrProfileObs(end) + rand(sx, sy, sz)*0;
-                    Zhhi(:,:,1:size(Zhhi,3)-1) = -inf;
-                    Zdri(:,:,1:size(Zhhi,3)-1) = 0;
+        %             sx = numel(obj.ex.xgrid);
+        %             sy = numel(obj.ex.ygrid);
+        %             sz = numel(obj.ex.zgrid);
+        %             Zhhi = obj.ZhhProfileObs(end) + zeros(sx, sy, sz)*0;
+        %             Zdri = obj.ZdrProfileObs(end) + rand(sx, sy, sz)*0;
+        %             Zhhi(:,:,1:size(Zhhi,3)-1) = -inf;
+        %             Zdri(:,:,1:size(Zhhi,3)-1) = 0;
 
-                    obj.ex = obj.ex.initFromLambdaName(obj.bandName);
-                    obj.ex = obj.ex.initFromDm(Zhhi(end), Zdri(end), Dm);
+        %             obj.ex = obj.ex.initFromLambdaName(obj.bandName);
+        %             obj.ex = obj.ex.initFromDm(Zhhi(end), Zdri(end), Dm);
                     
-                    Ntop3(...
-                        obj.ZdrGrid ==zdr, ...
-                        :, ...
-                        obj.DmGrid == Dm, ...
-                    :) = repmat(squeeze(obj.ex.N(1,1,end,:)),[1,3])';
+        %             Ntop3(...
+        %                 obj.ZdrGrid ==zdr, ...
+        %                 :, ...
+        %                 obj.DmGrid == Dm, ...
+        %             :) = repmat(squeeze(obj.ex.N(1,1,end,:)),[1,3])';
 
-                end
+        %         end
                 
-            end
-            obj.Ntop = Ntop3;
-        end
+        %     end
+        %     obj.Ntop = Ntop3;
+        % end
+        % function obj = estimateRadarProfiles(obj)
+        %     %% OBSOLETE, USE estimateSingleRadarProfile INSTEAD AND THE DA METHODS BELOW
 
-        
-
-        function obj = estimateRadarProfiles(obj)
-            %% OBSOLETE, USE estimateSingleRadarProfile INSTEAD AND THE DA METHODS BELOW
-
-            %% initialize the interpolants
+        %     %% initialize the interpolants
  
-            Ntopf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.Ntop, 'linear', 'linear');
-            detaf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.deta.(obj.bandName), 'linear', 'linear');
+        %     Ntopf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.Ntop, 'linear', 'linear');
+        %     detaf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.deta.(obj.bandName), 'linear', 'linear');
 
 
 
-            np = NaN(numel(obj.zgrid), numel(obj.DmGrid), 250);
+        %     np = NaN(numel(obj.zgrid), numel(obj.DmGrid), 250);
 
 
-            Ntop3s = [];
-            %% calculate the difference kernel at each height, RH, Dm (RH doesn't affect the Ntop)
-            for kk = 1:numel(obj.zgrid)
-                for ii = 1:numel(obj.DmGrid)
-                    np(kk,ii,:) = detaf(obj.ZdrProfileObs(end), obj.RHProfileObs(kk), obj.DmGrid(ii));
-                    Ntop3s(kk,ii,:) = Ntopf(obj.ZdrProfileObs(end), obj.RHProfileObs(1), obj.DmGrid(ii));
-                end
-            end
+        %     Ntop3s = [];
+        %     %% calculate the difference kernel at each height, RH, Dm (RH doesn't affect the Ntop)
+        %     for kk = 1:numel(obj.zgrid)
+        %         for ii = 1:numel(obj.DmGrid)
+        %             np(kk,ii,:) = detaf(obj.ZdrProfileObs(end), obj.RHProfileObs(kk), obj.DmGrid(ii));
+        %             Ntop3s(kk,ii,:) = Ntopf(obj.ZdrProfileObs(end), obj.RHProfileObs(1), obj.DmGrid(ii));
+        %         end
+        %     end
 
             
 
-            % integrate the difference kernel to get the DSD at each height
-            dnint = flipud(cumtrapz(obj.zgrid, np, 1));
-            obj.dNProfile = Ntop3s + dnint.*max(Ntop3s, [], 3);
+        %     % integrate the difference kernel to get the DSD at each height
+        %     dnint = flipud(cumtrapz(obj.zgrid, np, 1));
+        %     obj.dNProfile = Ntop3s + dnint.*max(Ntop3s, [], 3);
 
-            for jj = 1:numel(obj.DmGrid)
-                % calculate the radar observables from the DSD at each height
-                for kk = 1:numel(obj.zgrid)
-                    % print2
-                    obj.ex.N(1,1,kk,:) = squeeze(obj.dNProfile(kk,jj,:))';
+        %     for jj = 1:numel(obj.DmGrid)
+        %         % calculate the radar observables from the DSD at each height
+        %         for kk = 1:numel(obj.zgrid)
+        %             % print2
+        %             obj.ex.N(1,1,kk,:) = squeeze(obj.dNProfile(kk,jj,:))';
                     
-                    obj.ZhhProfileSim(kk,jj) = obj.ex.Zhh(1,1,kk);
-                    obj.ZdrProfileSim(kk,jj) = obj.ex.Zdr(1,1,kk);
-                end
-            end
+        %             obj.ZhhProfileSim(kk,jj) = obj.ex.Zhh(1,1,kk);
+        %             obj.ZdrProfileSim(kk,jj) = obj.ex.Zdr(1,1,kk);
+        %         end
+        %     end
 
-            obj.ZhhProfileSim(imag(obj.ZhhProfileSim)>0) = -inf;
-            obj.ZdrProfileSim(imag(obj.ZhhProfileSim)>0) = 0;
-        end
+        %     obj.ZhhProfileSim(imag(obj.ZhhProfileSim)>0) = -inf;
+        %     obj.ZdrProfileSim(imag(obj.ZhhProfileSim)>0) = 0;
+        % end
 
-
-        function varargout = estimateSingleRadarProfile(obj, Zhh, Zdr, Dm)
+        %% use the forward model LUT to estimate the radar profiles from the DSD at the top of the rainshaft
+        function varargout = estimateSingleRadarProfile(obj, N0,mu, lambda)
             % this is our backwards model that estimates the DSD profile.
             % in: Zhh in dBZ, Zdr in dB, Dm in mm for the top of the domain
             % out: dN, Zhhp, Zdrp, (dnint)
 
-            %% load the Ntop LUT and interpolate to get the Ntop
-            f=load('../data/LUTs/NtopLUTs.mat', 'NtopLUT', 'ZhhGrid', 'ZdrGrid', 'DmGrid');
-            Ntopf = griddedInterpolant({10.^(f.ZhhGrid./10), f.ZdrGrid, f.DmGrid}, f.NtopLUT.(obj.bandName), 'linear', 'linear');
-            Ntop = Ntopf(10.^(Zhh./10), Zdr, Dm);
+            %% calculate the DSD at the top of the rainshaft
+            % keyboard
+            Ntop = N0.*obj.ra.D.^(mu).*exp(-lambda.*obj.ra.D);
+            Zdr = obj.ra.calcZdr(Ntop);
+            Zhh = obj.ra.calcZhh(Ntop);
+            [~,ind] = max(Ntop);
+            Dm = obj.ra.D(ind);
 
-            %% initialize the difference kernel interpolant
-            detaf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.deta.(obj.bandName), 'linear', 'linear');
+            %% initialize the forward model interpolant
+            % detaf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.deta.(obj.bandName), 'linear', 'linear');
+
+            if isempty(obj.detaInterpolant)
+                if obj.hires
+                    obj.detaInterpolant = load(sprintf('../data/LUTs/detaLUTs-N0MuLambda-hires-%1.0f.mat', obj.minuteIdx), 'detaInterpolant');
+                else
+                    obj.detaInterpolant = load(sprintf('../data/LUTs/detaLUTs-N0MuLambda-%1.0f.mat', obj.minuteIdx), 'detaInterpolant');
+                end
+                obj.detaInterpolant = obj.detaInterpolant.detaInterpolant;
+            end
 
             %% calculate the difference kernel (detakk) at each height, RH
-            detakk = squeeze(detaf(...
-                Zdr.*ones(size(obj.RHProfileObs)), ...
-                obj.RHProfileObs, ...
-                Dm.*ones(size(obj.RHProfileObs)) ...
+            detakk = squeeze(obj.detaInterpolant(...
+                mu.*ones(size(obj.RHProfileObs)), ...
+                lambda.*ones(size(obj.RHProfileObs)), ...
+                obj.RHProfileObs ...
             ));
 
             %% repeat the ntop for each height
@@ -176,6 +200,9 @@ classdef dsdAssimilation < handle
                 Zhhp(kk) = obj.ra.calcZhh(dN(kk,:));
                 Zdrp(kk) = obj.ra.calcZdr(dN(kk,:));
             end
+
+            Zhhp = (Zhhp)';
+            Zdrp = (Zdrp)';
 
             %% return the requested outputs
             if nargout == 3
@@ -239,7 +266,7 @@ classdef dsdAssimilation < handle
             end
         end
 
-
+        %% initialize N based on reflectivity, Zdr, and Dm (not recommended)
         function [N,N0, mu, gamma] = getNFromZhhZdrDm(da,Z, Zdr, Dm)
             % in: Z in dBZ, Zdr in dBz
             % out: N in m^-3 mm^-1
@@ -307,102 +334,157 @@ classdef dsdAssimilation < handle
             end
         
         end
+
+        %% helper functions to convert between N0, mu, lambda and Zhh
+        function N0 = getN0FromZhhMuLambda(obj, Zhh, mu, lambda)
+            % in: Zhh in dBZ, mu, and lambda in mm^-1 
+            % out: N0 in m^-3 mm^-1
+            N1 = (obj.ra.D.^(mu) .* exp(-lambda.*obj.ra.D));
+            Zhh1 = obj.ra.calcZhh(N1);
+            N0 = 10.^(Zhh/10)./10.^(Zhh1/10);
+        end
+
+        %% helper function to use the gamma distribution to get N from N0, mu, lambda
         function [N] = getNFromN0MuLambda(obj, N0, mu, lambda)
             % in: N0 in m^-3 mm^-1, mu, and lambda mm^-1 
             % out: N in m^-3 mm^-1
-            
             N = N0(:) .* (obj.ra.D.^(mu(:))) .* exp(-lambda(:).*obj.ra.D);
             N(isnan(N)) = 0;
         end
-    end
 
-    methods 
-        function bakeDSDs(obj)
-            % function that calculates the DSD at the top of the rainshaft for many combinations of Zhh, Zdr, Dm
-            % and saves them in a LUT. These can then be used later to interpolate the DSD at the top of the rainshaft for quick access.
+        %% estimate the N0, mu, and lambda from a given N using curve fitting.
+        function[N0,mu,lambda] = getN0MuLambdaFromN(obj, N)
+            % in: N in m^-3 mm^-1
+            % out: N0 in m^-3 mm^-1, mu, and lambda in mm^-1 
 
-            obj.ex = exmiras;
 
-            NtopLUT = struct(...
-                'S', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250), ...
-                'C', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250), ...
-                'X', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250) ...
-            );
-            progress = 0;
-            total = numel(obj.ZhhGrid) * numel(obj.ZdrGrid) * numel(obj.DmGrid);
-            for bandName = ["S", "C", "X"]             
-                for Zhh = obj.ZhhGrid
-                    for Dm = obj.DmGrid
-                        for Zdr = obj.ZdrGrid
-                            obj.ex = exmiras;
+            fun = @(x) calcErr(N, x(1), x(2), x(3));
+            % initial guesses
+            N01 = 1e8;
+            mui = 5;
+            lambdai = 5;
+            % search for the optimal gamma and mu
+            [x,~] =  fminsearchbnd(fun, [N01, mui, lambdai], [1, -2, 0], [1e11, 20, 20]);
+            N0 = x(1);
+            mu = x(2);
+            lambda = x(3);
 
-                            if mod(progress/total*100, 10) == 0
-                                fprintf('Progress: %d/%d\n', progress, total)
-                            end
             
-                            % Run the ideal simulation                  
-                            %%! set up initial droplet size distribution
-                            % fprintf('T0m = %1.2f, humidity = %1.2f, dBZStart = %d, zdr = %1.2f\n', T0m, humidity, dBZStart, zdr)
-                            obj.ex.rngToggle = false;
-                            %% set up initial droplet size distribution
-                            obj.ex.xgrid = [50];
-                            obj.ex.ygrid = [50];
-                            obj.ex.zgrid = 25:50:2025;
 
-                            sx = numel(obj.ex.xgrid);
-                            sy = numel(obj.ex.ygrid);
-                            sz = numel(obj.ex.zgrid);
-                            Zhhi = Zhh + zeros(sx, sy, sz)*0;
-                            Zdri = Zdr + rand(sx, sy, sz)*0;
-                            Zhhi(:,:,1:size(Zhhi,3)-1) = -inf;
-                            Zdri(:,:,1:size(Zhhi,3)-1) = 0;
-
-                            obj.ex = obj.ex.initFromLambdaName(bandName);
-                            obj.ex = obj.ex.initFromDm(Zhhi(end), Zdri(end), Dm);
-                            
-                            NtopLUT.(bandName)(...
-                                obj.ZhhGrid ==Zhh, ...
-                                obj.ZdrGrid == Zdr, ...
-                                obj.DmGrid == Dm, ...
-                                : ...
-                            ) = squeeze(obj.ex.N(1,1,end,:));
-
-                            progress = progress + 1;
-                        end
-                    end
-                end
+            function err = calcErr(N, N0, mu, lambda)
+                Nsim = obj.getNFromN0MuLambda(N0, mu, lambda);
+                % keyboard
+                opt = optimset('TolX',1e-2,'TolFun',1e-2,'Display','off');
+                err = rms((N(:) - Nsim(:))./max(N(:)), "omitmissing");
             end
-
-            ZhhGrid = obj.ZhhGrid;
-            ZdrGrid = obj.ZdrGrid;
-            DmGrid = obj.DmGrid;
-            save('../data/LUTs/NtopLUTs.mat', 'NtopLUT', 'ZhhGrid', 'ZdrGrid', 'DmGrid')
-
         end
     end
+
+    % methods 
+    %     function bakeDSDs(obj)
+    %         % function that calculates the DSD at the top of the rainshaft for many combinations of Zhh, Zdr, Dm
+    %         % and saves them in a LUT. These can then be used later to interpolate the DSD at the top of the rainshaft for quick access.
+
+    %         obj.ex = exmiras;
+
+    %         NtopLUT = struct(...
+    %             'S', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250), ...
+    %             'C', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250), ...
+    %             'X', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250) ...
+    %         );
+    %         progress = 0;
+    %         total = numel(obj.ZhhGrid) * numel(obj.ZdrGrid) * numel(obj.DmGrid);
+    %         for bandName = ["S", "C", "X"]             
+    %             for Zhh = obj.ZhhGrid
+    %                 for Dm = obj.DmGrid
+    %                     for Zdr = obj.ZdrGrid
+    %                         obj.ex = exmiras;
+
+    %                         if mod(progress/total*100, 10) == 0
+    %                             fprintf('Progress: %d/%d\n', progress, total)
+    %                         end
+            
+    %                         % Run the ideal simulation                  
+    %                         %%! set up initial droplet size distribution
+    %                         % fprintf('T0m = %1.2f, humidity = %1.2f, dBZStart = %d, zdr = %1.2f\n', T0m, humidity, dBZStart, zdr)
+    %                         obj.ex.rngToggle = false;
+    %                         %% set up initial droplet size distribution
+    %                         obj.ex.xgrid = [50];
+    %                         obj.ex.ygrid = [50];
+    %                         obj.ex.zgrid = 25:50:2025;
+
+    %                         sx = numel(obj.ex.xgrid);
+    %                         sy = numel(obj.ex.ygrid);
+    %                         sz = numel(obj.ex.zgrid);
+    %                         Zhhi = Zhh + zeros(sx, sy, sz)*0;
+    %                         Zdri = Zdr + rand(sx, sy, sz)*0;
+    %                         Zhhi(:,:,1:size(Zhhi,3)-1) = -inf;
+    %                         Zdri(:,:,1:size(Zhhi,3)-1) = 0;
+
+    %                         obj.ex = obj.ex.initFromLambdaName(bandName);
+    %                         obj.ex = obj.ex.initFromDm(Zhhi(end), Zdri(end), Dm);
+                            
+    %                         NtopLUT.(bandName)(...
+    %                             obj.ZhhGrid ==Zhh, ...
+    %                             obj.ZdrGrid == Zdr, ...
+    %                             obj.DmGrid == Dm, ...
+    %                             : ...
+    %                         ) = squeeze(obj.ex.N(1,1,end,:));
+
+    %                         progress = progress + 1;
+    %                     end
+    %                 end
+    %             end
+    %         end
+
+    %         ZhhGrid = obj.ZhhGrid;
+    %         ZdrGrid = obj.ZdrGrid;
+    %         DmGrid = obj.DmGrid;
+    %         save('../data/LUTs/NtopLUTs.mat', 'NtopLUT', 'ZhhGrid', 'ZdrGrid', 'DmGrid')
+
+    %     end
+    % end
 
     %% data assimilation methods
     methods
         function varargout=profileOptimizer(obj, ZhhProfileObs, ZdrProfileObs)
             % function that optimizes a profile of simulated Zhh and Zdr to find the best fitting DSD.
             % inputs: ZhhProfileObs, ZdrProfileObs: observed profiles of Zhh and Zdr to fit
-            % outputs: ZhhOpt, ZdrOpt, DmOpt: optimized values of Zhh, Zdr, and Dm
-            %          fv: value of the objective function at the optimum 
-            
+            % outputs: N0, mu, lambda: optimized values of N0, mu, and lambda
+            % outputs: ~,  ~,  ~, fv: value of the objective function at the optimum
+            % outputs: ~,  ~,  ~, ~, N: optimized DSD vertical profile
 
-            
             options = optimset();
-            options.TolX = 1e-2;
-            options.TolFun = 1e-2;
+            options.TolX = 1e-1;
+            options.TolFun = 1e1;
         
             %% run the assimilation optimization routine
             % initial guess: median of the observed profiles, and 0.7 mm for D
+            % use the Zhang et al. (2001) method to get an initial guess for N0, mu, and gamma, then run ensemble around that.
+            lambdai = max(min(4./(mean(ZdrProfileObs(:), "omitmissing")),12), 0); % initial guess for gamma
+            mui = -0.016*lambdai.^2 + 1.213*lambdai - 1.957;% initial guess for mu
+            N0i = obj.getN0FromZhhMuLambda(mean(real(ZhhProfileObs(:)), "omitmissing"), mui, lambdai);
+            x = [N0i, mui, lambdai];
+
+            muList = mui + (-2:1:2);
+            lambdaList = lambdai + (-2:1:2);
+            muList = muList(muList>=-2 & muList<=15);
+            lambdaList = lambdaList(lambdaList>=0 & lambdaList<=20);
             try
-                [x,fv]=fminsearchbnd(@errorFunc, ...
-                    [prctile(ZhhProfileObs(:),50), prctile(ZdrProfileObs(:),50), 0.7], ...
-                    [prctile(ZhhProfileObs(:),5), prctile(ZdrProfileObs(:),15), 0.4], ...
-                    [prctile(ZhhProfileObs(:),95), prctile(ZdrProfileObs(:),85), 1.6], ...
-                    options);
+                for ii= 1:length(muList)
+                    for jj = 1:length(lambdaList)
+                        xStart = [N0i, muList(ii), lambdaList(jj)];
+                        [x,fv]=fminsearchbnd(@errorFunc, ...
+                            xStart, ...
+                            [1, -2, 0], ...
+                            [1e11, 15, 20], ...
+                            options);
+                        xtemp(ii,:) = x;
+                        fvtemp(ii) = fv;
+                        [fv, ind] = min(fvtemp);
+                        x = xtemp(ind, :);
+                    end     
+                end
             catch
                 warning('Optimization failed, returning NaNs')
                 switch nargout
@@ -410,46 +492,82 @@ classdef dsdAssimilation < handle
                         varargout = {NaN, NaN, NaN};
                     case 4
                         varargout = {NaN, NaN, NaN, NaN};
+                    case 5
+                        varargout = {NaN, NaN, NaN, NaN, NaN};
                 end
                 return
             end 
 
-            %% extract the optimized and return
-            ZhhOpt = x(1); % dBZ
-            ZdrOpt = x(2); % dB
-            DmOpt = x(3); % mm
+            %% extract the optimized and return outputs.
+            N0Opt = x(1); % dBZ
+            muOpt = x(2); % dB
+            lambdaOpt = x(3); % mm
+            [N,~,~] = obj.estimateSingleRadarProfile(N0Opt, muOpt, lambdaOpt);
             switch nargout
                 case 3
-                    varargout = {ZhhOpt, ZdrOpt, DmOpt};
+                    varargout = {N0Opt, muOpt, lambdaOpt};
                 case 4
-                    varargout = {ZhhOpt, ZdrOpt, DmOpt, fv};
+                    varargout = {N0Opt, muOpt, lambdaOpt, fv};
+                case 5
+                    % keyboard
+                    varargout = {N0Opt, muOpt, lambdaOpt, fv, N};
             end
 
             function errorReturn=errorFunc(x)
                 % calculates the error between the observed and simulated profiles for a given set of Zhh, Zdr, and Dm
-                % x(1) = Zhh, x(2) = Zdr, x(3) = Dm
-                Zhh = x(1); % dBZ
-                Zdr = x(2); % dB
-                Dm = x(3); % mm
+                % x(1) = N0, x(2) = mu, x(3) = lambda
+                if isa(x, 'table')
+                    x = table2array(x);
+                end
+            
+                N0 = x(1); % mm^-1 m^-3
+                mu = x(2); % 
+                lambda = x(3); % mm^-1
+                
+                
                 % function to optimize the profile of the DSD
-                [dN, Zhhp, Zdrp] = obj.estimateSingleRadarProfile(Zhh, Zdr, Dm);
+                [~, Zhhp, Zdrp] = obj.estimateSingleRadarProfile(N0, mu, lambda);
+                Zvvp = Zhhp - Zdrp;
                 
-                ZhhProfileObs = 10.^(ZhhProfileObs./10);
+                % convert to linear units
+                ZhhProfileObsLinear = 10.^(ZhhProfileObs./10);
                 Zhhp = 10.^(Zhhp./10);
-                errorRaw = (Zhhp(:) - ZhhProfileObs).*(ZhhProfileObs./max(ZhhProfileObs(:))).^2;
-                errorMode = mean(errorRaw, 2, 'omitnan');
-                errorRawZdr = Zdrp(:) - ZdrProfileObs;
-                errorModeZdr = mean(errorRawZdr, 2, 'omitnan');
-                errorReturn = abs(mean(errorMode, "all", 'omitnan')) + ...
-                    abs(mean(errorModeZdr, "all", 'omitnan'));
+                Zvvp = 10.^(Zvvp./10);
                 
+                %% calculate the error between the observed and simulated profiles
+                % Zhh
+                errorRawZhh = (Zhhp(:) - ZhhProfileObsLinear);
+                errorZhh = rms(mean(errorRawZhh, 'all', 'omitnan'), "omitmissing");
+                
+                %Zdr
+                errorRawZvv = (Zvvp(:) - 10.^((ZhhProfileObs - ZdrProfileObs)./10));
+                errorZvv = rms(mean(errorRawZvv, 'all', 'omitnan'), "omitmissing");
+
+                errorReturn = (mean([errorZhh, (errorZvv)], "all","omitnan")); % + errorModeZdr.^2;
+
+                % penalize solutions that are outside the physical bounds of the forward model
+                polytop = [2.3277, -0.9189];
+                polybot = [0.2796, -2.0];
+                distbot = x(2) - polyval(polybot, x(3));
+                disttop = x(2) - polyval(polytop, x(3));
+                if distbot < 0 
+                    errorReturn = errorReturn + (distbot).^2;
+                end
+
+                if disttop > 0
+                    errorReturn = errorReturn + (disttop).^2;
+                end
+
                 if isnan(errorReturn)
+                    % keyboard
                     error('not enough data to constrain the optimization');
                 end
+                
 
             end
         end
 
+        %% alias of pointOptimizer. kept to remain consistent with profileOptimizer()
         function varargout=pointOptimizer(obj, ZhhPointObs, ZdrPointObs)
            %% uses the Zhang et al. (2001) method to get an initial guess for N0, mu, and gamma
            % this is the same as getNFromZhhZdr, but here for clarity
@@ -462,10 +580,14 @@ classdef dsdAssimilation < handle
         end
     end
 
+    %% constructor
     methods 
         function da = dsdAssimilation(lambda)
             % loads an instance of the radar class for the specified wavelength
             da.ra = radar(lambda);
+            da.De = logspace(log10(0.1),log10(da.dMax),da.nBins+1);
+            da.D =  (da.De(1:end-1) + da.De(2:end))/2;
+            da.Dw = diff(da.De);
 
         end
     end

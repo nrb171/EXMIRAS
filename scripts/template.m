@@ -8,7 +8,7 @@ ex.zgrid = %!zgrid in meters, e.g. 50:50:2050. These should be set so that 0.5*e
 
 %% USER: set initial conditions
 bandName = %!Letter of the band, e.g. "S"
-dBZStart = %!dBZ at the top of the simulation, e.g. 20
+ZhhStart = %!Zhh at the top of the simulation, e.g. 20
 zdr = %!Zdr at the top of the simulation, e.g. 0.5
 T0m = %!starting Temperature at the bottom of the simulation, e.g. 273.15
 lapseRate = %!lapse rate in K/m, e.g. -6.5
@@ -32,15 +32,19 @@ variablesToSave = %!variables to save, e.g. {'T', 'p', 'pv', 'qv', 'Zhh', 'Zvv',
 sx = numel(ex.xgrid);
 sy = numel(ex.ygrid);
 sz = numel(ex.zgrid);
-dBZi = dBZStart + rand(sx, sy, sz)*0;
-Zdri = zdr + rand(sx, sy, sz)*0;
-dBZi(:,:,1:size(dBZi,3)-1) = -inf;
-Zdri(:,:,1:size(dBZi,3)-1) = 0;
 
-% run the dsd solver
-ex = ex.initFromLambdaName(bandName);
-ex = ex.initFromReflectivity(dBZi, Zdri);
+% run the dsd solver (for a point source)
+ex = ex.initializeRadarSimulator(bandName);
+N = ex.da.pointOptimizer(ZhhStart, zdr);
+ex.N(1,1,end,:) = N;
 ex.NP = ex.N;
+
+%{
+For a vertical profile of reflectivity:
+[~,~,~,~, N] = ex.da.profileOptimizer(ZhhProfile, ZdrProfile);
+% ZhhProfile and ZdrProfile are vectors of size(sz,1)
+
+%}
 
 %% set up initial state variables
 temp = @(z) lapseRate*z/1000 + T0m;
@@ -56,13 +60,12 @@ ex.u = zeros(size(ex.N, [1:3]))
 ex.v = zeros(size(ex.N, [1:3]))
 ex.w = zeros(size(ex.N, [1:3]))
 
-
 %% set up structure to save the simulation
 ExmirasRun = struct();
 ExmirasRun.InitVariables.p = pres(zm);
 ExmirasRun.InitVariables.T = temp(zm);
 ExmirasRun.InitVariables.pv = es(ex.T)*humidity;
-ExmirasRun.ID = sprintf('%s_ideal_%d_%1.2f_%2.0d', bandName, T0m, humidity,dBZStart);
+ExmirasRun.ID = sprintf('%s_ideal_%d_%1.2f_%2.0d', bandName, T0m, humidity,ZhhStart);
 
 for i = 1:numel(variablesToSave)
     %note: variablesToSave is set above by the user
@@ -77,6 +80,15 @@ for i = 1:numSteps
     end
     ex = ex.integrate;
 
+    %% if you have observations, you can assimilate them here at the time steps that correspond with the observations
+    % there's also a full example in rhiToEXMIRASTIMREXSpol.m using profiles of Zhh and Zdr
+    % e.g.
+    %if (i-1)*ex.dt>=obsSeconds(iObs+1) & i*ex.dt<obsSeconds(iObs+2)
+        % N = ex.da.pointOptimizer(ZhhiObs(:,:,(iObs+1)), ZdriObs(:,:,(iObs+1)));
+        % ex.N(1,1,end,:) = N;
+        % ex.NP = ex.N;
+        % iObs = iObs + 1;
+    %end
     % save variables
     for j = 1:numel(variablesToSave)
         ExmirasRun.(variablesToSave{j})(i,:) = ex.(variablesToSave{j})(1,1,:);

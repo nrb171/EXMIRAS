@@ -6,7 +6,7 @@ Table of Contents:
 - [Running the test cases](../docs/runningTheTestCases.md)
   
 # EXMIRAS
-EXMIRAS is a MATLAB-based software package for simulating liquid rainfall and dual-pol radar observations of that rainfall. 
+EXMIRAS is a MATLAB-based software package for simulating liquid rainfall, simulating dual-pol radar observations of that rainfall, and assimilating DSDs from dual-pol observations into the simulator.  
 
 ## Installation
 Clone the repository on a machine with MATLAB installed: 
@@ -22,7 +22,7 @@ git clone https://github.com/nrb171/EXMIRAS
     - [`../scripts/helpers/processASOS.py`](../scripts/helpers/processASOS.py) requires [`pandas`](https://pandas.pydata.org/), [`numpy`](https://pypi.org/project/numpy/), and [`metpy`](https://pypi.org/project/MetPy/). This script was used to process the metar data for the case study in the paper. If you are using a different dataset, you will need to modify the script accordingly.
 
 ## Instructions
-From this point forward, `exmiras` refers to the `exmiras.m` class, while `EXMIRAS` refers to the entire package.
+From this point forward, `exmiras` or `ex` refers to the `exmiras.m` class, while `EXMIRAS` refers to the entire package.
 1. First, create a new script and call the `exmiras` class:
     ```matlab
     ex = exmiras;
@@ -43,18 +43,12 @@ From this point forward, `exmiras` refers to the `exmiras.m` class, while `EXMIR
     - *`ex.nBins = 250 % integer, constant`*: The number of droplet size bins for the simulation.  
     Note: the domain will be set as `[sx, sy, sz, nbins]` where sx/sy/sz are the numel(sizex/y/z).
 
-    #### number concentration properties
-    These properties control the drop size distribution (DSD) for the simulation. It is recommended to set these values automatically using the `ex = ex.initFromReflectivity(dBZi, Zdri);` class method where `dBZi` is the reflectivity in dBZ and `Zdri` is the differential reflectivity in dBZ. However, these can all be set manually if desired.
-    - **`ex.N % m^-3 mm^-1, [sx, sy, sz, nbins], required`**: The number concentration for the simulation. This is the number of droplets per cubic meter per millimeter of diameter.
-    - **`ex.N0 % m^-3 mm^-1, [sx, sy, sz, nbins], required`**: the dsd from the previous time step. This is used to calculate several rates of change in the simulation.
-    - *`ex.N00 = ex.N; % m^-3 mm^-1, [sx, sy, sz, nbins], required`*: The initial dsd for the simulation. This is used to calculate several rates of change in the simulation.
-    - **`ex.mu % shape parameter, required`**: The shape parameter for the gamma distribution. This is used to calculate the drop size distribution (DSD) for the simulation.
-    - **`ex.gamma % scale parameter, required`**: The scale parameter for the gamma distribution. 
-    - **`ex.NP % m^-3 mm^-1, [sx, sy, sz, nbins], required`**: This is the number concentration from the 'parent' field. This sets the initial number concentration for the simulation and is replenished at the end of each time step. This essentially is the source of the rainfall. <u>**This value is not updated from the `ex.initFromReflectivity` method.**</u>
+    
 
-    #### radar properties
-    These properties store the radar simulations or the radar settings.
-    - `ex.lambda = 111 % mm`: The wavelength for the radar simulation. This can also be set using the name of the wavelength from the `ex = ex.initFromLambdaName(lambdaName);` class method. The options/wavelengths are as follows:
+    #### [`radar`](/docs/radar.md) subroutines and properties
+    These properties store the radar simulations or the radar settings. They are calculated by calling the [`radar`](/docs/radar.md)
+    To use these properties, you must first initialize the [`radar`](/docs/radar.md) class hook by calling `ex = ex.initializeRadarSimulator(bandName)`. The [`radar`](/docs/radar.md) subroutines can be accessed by calling `ex.ra.subroutineName()`.
+    - `ex.lambda = 111 % mm`: The wavelength for the radar simulation. Do not change this property directly; use `ex.initializeRadarSimulator(bandName)` instead, since that will update the `ex.ra` and `ex.da` classes.
         - `bandName = ["S",    "C",    "X",        "Ku",       "Ka"       ];`
         - `wavelength = [111,  53.5,   33.3,       22,         8.43       ];`
     - *`ex.dpp % constant`*: the structure holding the scattering properties from the LUTs. 
@@ -64,8 +58,30 @@ From this point forward, `exmiras` refers to the `exmiras.m` class, while `EXMIR
     - *`ex.kdp % deg/km, [sx, sy, sz], dependent`*: the specific differential phase.
     - *`ex.rhohv %correlation, [sx, sy, sz], dependent`*: the cross-correlation coefficient.
     - *`ex.RR % mm/hr, [sx, sy, sz], dependent`*: the rain rate.
+  
+    Please see [`radar`](/docs/radar.md) for more information.
+
+
+    #### droplet size distribution and [`dsdAssimilation`](/docs/dsdAssimilation.md) subroutines and properties
+    These properties control the drop size distribution (DSD) for the simulation. They are updated after each call to `ex.integrate()`, but there are cases where they need to be changed (e.g., [real cases](/scripts/rhiToEXMIRASTIMREXSpol.m)).
+    
+    - **`ex.N % m^-3 mm^-1, [sx, sy, sz, nbins], required`**: The number concentration for the simulation. This is the number of droplets per cubic meter per millimeter of diameter.
+    - **`ex.N0 % m^-3 mm^-1, [sx, sy, sz, nbins], required`**: the dsd from the previous time step. This is used to calculate several rates of change in the simulation.
+    - *`ex.N00 = ex.N; % m^-3 mm^-1, [sx, sy, sz, nbins], required`*: The initial dsd for the simulation. 
+    - **`ex.NP % m^-3 mm^-1, [sx, sy, sz, nbins], required`**: This is the number concentration from the 'parent' field. This sets the fields where  the DSD is constant and replenished at the end of each time step. This essentially is the source of the rainfall.
+
+    You can set all of the above properties manually, but you can use the `ex.da` subroutines as well.
+    To use these methods, you must first initialize the [`ex.da`](/docs/dsdAssimilation.md) class hook by calling `ex = ex.initializeRadarSimulator(bandName)`.
+    ```
+    ex = ex.initializeRadarSimulator(bandName);
+    N = ex.da.pointOptimizer(ZhhObs, ZdrObs);
+    ex.N(1,1,end,:) = N;
+    ex.NP = ex.N;
+    ```
+    Please see [`dsdAssimilation`](/docs/dsdAssimilation.md) for more information. 
     
     #### droplet properties
+    These are read-only values. Do not change them, it may break `exmiras`.
     - *`ex.D % mm, [nbins], dependent`*: the characteristic droplet diameter in each bin.
     - *`ex.Dw % mm, [nbins], dependent`*: the width of each droplet size bin.
     - *`ex.Dmax % mm, [1], constant`*: the maximum droplet diameter.
@@ -92,7 +108,9 @@ From this point forward, `exmiras` refers to the `exmiras.m` class, while `EXMIR
     - *`ex.dTevap % K, [sx, sy, sz], dependent`*: the change in atmospheric temperature from evaporative processes.
 
 ### running the simulation
-3. Once all of the properties have been set, you can run the simulation using the `ex = ex.integrate();` class method. This will simulate a single time step and update all of the properties at each time step. If you want to record the simulation's result at each time steps, using something like the following code snippet:
+3. Once all of the properties have been set, you can run the simulation using the `ex = ex.integrate();` class method. This will simulate a single time step and update all of the properties at each time step. A full example of performing the DA, coupling the simulation, and plotting results is available at [`rhiToEXMIRASTIMREXSpol.m`](/scripts/rhiToEXMIRASTIMREXSpol.m). A template to run an idealized simulation is available at [`template.m`](/scripts/template.m).
+
+Or, a sample below shows how to record the simulation's result at each time step:
 
     ```matlab
     T = zeros(numSteps, sz);
@@ -119,8 +137,7 @@ From this point forward, `exmiras` refers to the `exmiras.m` class, while `EXMIR
         kdp(i,:) = ex.kdp(1,1,:);
     end
     ```
-    This will record height-time profiles of the simulation's results. You can then plot them using [`../scripts/helpers/plotTimeProfile.m`](../scripts/helpers/plotTimeProfile.m).
-
+    This will record height-time profiles of the simulation's results. You can then plot them using [`plotTimeProfile.m`](/scripts/helpers/plotTimeProfile.m).
 
 
 

@@ -10,24 +10,7 @@ classdef dsdAssimilation < handle
         
         zgrid = 25:50:2025;
         RHProfileObs = ones(1,41)*0.3;
-        ZhhProfileObs = ones(1,41)*30;
-        ZdrProfileObs = ones(1,41)*0.5;
 
-        ZhhProfileSim 
-        ZdrProfileSim 
-
-        ZhhGrid = 20:5:75;
-        DmGrid = 0.1:0.1:1.8;
-        ZdrGrid = 0.3:0.3:3;
-
-        RHGrid
-        RHGridlores = 0.1:0.3:0.9;
-        RHGridhires = 0.1:0.05:0.95;
-
-
-
-        Ntop
-        deta
         detaInterpolant
         detaLUTs
 
@@ -38,130 +21,16 @@ classdef dsdAssimilation < handle
         %% other classes used
         ra
 
-        dNProfile
-
-    end
-    methods % dependent properties
-
-        function deta = get.deta(obj)
-
-            if isempty(obj.detaLUTs)
-
-                if obj.hires
-                    detat = load(sprintf('../data/LUTs/detaLUTs-hires-%1.0f.mat', obj.minuteIdx), 'deta');
-                    deta = detat.deta;
-                else
-                    detat = load(sprintf('../data/LUTs/detaLUTs-%1.0f.mat', obj.minuteIdx), 'deta');
-                    deta = detat.deta;
-                end
-                obj.detaLUTs = deta;
-            else
-                deta = obj.detaLUTs;
-            end
-        end
-
-        function RHGrid = get.RHGrid(obj)
-            if obj.hires
-                RHGrid = obj.RHGridhires;
-            else
-                RHGrid = obj.RHGridlores;
-            end
-        end
     end
 
     methods % main methods
-        
-        % function obj = getNtop(obj)
-
-        %     % detaf = griddedInterpolant({zdrgrid, RHgrid, Dmgrid}, deta.(bandName), 'linear', 'extrap');
-
-        %     %% Get Ntop for each combination of 
-        %     obj.ex = exmiras;
-        %     for zdr = obj.ZdrGrid
-        %         for Dm = obj.DmGrid
-                    
-        %             % Run the ideal simulation                  
-        %             %%! set up initial droplet size distribution
-        %             % fprintf('T0m = %1.2f, humidity = %1.2f, dBZStart = %d, zdr = %1.2f\n', T0m, humidity, dBZStart, zdr)
-        %             obj.ex.rngToggle = false;
-        %             %% set up initial droplet size distribution
-        %             obj.ex.xgrid = [50];
-        %             obj.ex.ygrid = [50];
-        %             obj.ex.zgrid = 25:50:2025;
-
-        %             sx = numel(obj.ex.xgrid);
-        %             sy = numel(obj.ex.ygrid);
-        %             sz = numel(obj.ex.zgrid);
-        %             Zhhi = obj.ZhhProfileObs(end) + zeros(sx, sy, sz)*0;
-        %             Zdri = obj.ZdrProfileObs(end) + rand(sx, sy, sz)*0;
-        %             Zhhi(:,:,1:size(Zhhi,3)-1) = -inf;
-        %             Zdri(:,:,1:size(Zhhi,3)-1) = 0;
-
-        %             obj.ex = obj.ex.initFromLambdaName(obj.bandName);
-        %             obj.ex = obj.ex.initFromDm(Zhhi(end), Zdri(end), Dm);
-                    
-        %             Ntop3(...
-        %                 obj.ZdrGrid ==zdr, ...
-        %                 :, ...
-        %                 obj.DmGrid == Dm, ...
-        %             :) = repmat(squeeze(obj.ex.N(1,1,end,:)),[1,3])';
-
-        %         end
-                
-        %     end
-        %     obj.Ntop = Ntop3;
-        % end
-        % function obj = estimateRadarProfiles(obj)
-        %     %% OBSOLETE, USE estimateSingleRadarProfile INSTEAD AND THE DA METHODS BELOW
-
-        %     %% initialize the interpolants
- 
-        %     Ntopf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.Ntop, 'linear', 'linear');
-        %     detaf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.deta.(obj.bandName), 'linear', 'linear');
-
-
-
-        %     np = NaN(numel(obj.zgrid), numel(obj.DmGrid), 250);
-
-
-        %     Ntop3s = [];
-        %     %% calculate the difference kernel at each height, RH, Dm (RH doesn't affect the Ntop)
-        %     for kk = 1:numel(obj.zgrid)
-        %         for ii = 1:numel(obj.DmGrid)
-        %             np(kk,ii,:) = detaf(obj.ZdrProfileObs(end), obj.RHProfileObs(kk), obj.DmGrid(ii));
-        %             Ntop3s(kk,ii,:) = Ntopf(obj.ZdrProfileObs(end), obj.RHProfileObs(1), obj.DmGrid(ii));
-        %         end
-        %     end
-
-            
-
-        %     % integrate the difference kernel to get the DSD at each height
-        %     dnint = flipud(cumtrapz(obj.zgrid, np, 1));
-        %     obj.dNProfile = Ntop3s + dnint.*max(Ntop3s, [], 3);
-
-        %     for jj = 1:numel(obj.DmGrid)
-        %         % calculate the radar observables from the DSD at each height
-        %         for kk = 1:numel(obj.zgrid)
-        %             % print2
-        %             obj.ex.N(1,1,kk,:) = squeeze(obj.dNProfile(kk,jj,:))';
-                    
-        %             obj.ZhhProfileSim(kk,jj) = obj.ex.Zhh(1,1,kk);
-        %             obj.ZdrProfileSim(kk,jj) = obj.ex.Zdr(1,1,kk);
-        %         end
-        %     end
-
-        %     obj.ZhhProfileSim(imag(obj.ZhhProfileSim)>0) = -inf;
-        %     obj.ZdrProfileSim(imag(obj.ZhhProfileSim)>0) = 0;
-        % end
-
         %% use the forward model LUT to estimate the radar profiles from the DSD at the top of the rainshaft
         function varargout = estimateSingleRadarProfile(obj, N0,mu, lambda)
-            % this is our backwards model that estimates the DSD profile.
+            % this is our forward model that estimates the DSD profile.
             % in: Zhh in dBZ, Zdr in dB, Dm in mm for the top of the domain
             % out: dN, Zhhp, Zdrp, (dnint)
 
             %% calculate the DSD at the top of the rainshaft
-            % keyboard
             Ntop = N0.*obj.ra.D.^(mu).*exp(-lambda.*obj.ra.D);
             Zdr = obj.ra.calcZdr(Ntop);
             Zhh = obj.ra.calcZhh(Ntop);
@@ -169,8 +38,6 @@ classdef dsdAssimilation < handle
             Dm = obj.ra.D(ind);
 
             %% initialize the forward model interpolant
-            % detaf = griddedInterpolant({obj.ZdrGrid, obj.RHGrid, obj.DmGrid}, obj.deta.(obj.bandName), 'linear', 'linear');
-
             if isempty(obj.detaInterpolant)
                 if obj.hires
                     obj.detaInterpolant = load(sprintf('../data/LUTs/detaLUTs-N0MuLambda-hires-%1.0f.mat', obj.minuteIdx), 'detaInterpolant');
@@ -199,16 +66,22 @@ classdef dsdAssimilation < handle
             for kk = 1:numel(obj.zgrid)
                 Zhhp(kk) = obj.ra.calcZhh(dN(kk,:));
                 Zdrp(kk) = obj.ra.calcZdr(dN(kk,:));
+                Kdpp(kk) = obj.ra.calcKdp(dN(kk,:));
             end
 
             Zhhp = (Zhhp)';
             Zdrp = (Zdrp)';
 
             %% return the requested outputs
+
             if nargout == 3
                 varargout = {dN, Zhhp, Zdrp};
+            elseif nargout == 1
+                varargout = {dN};
+            elseif nargout == 2
+                varargout = {Zhhp, Zdrp};
             elseif nargout == 4
-                varargout = {dN, Zhhp, Zdrp, dnint};
+                varargout = {dN, Zhhp, Zdrp, Kdpp};
             end
 
         end
@@ -379,71 +252,6 @@ classdef dsdAssimilation < handle
             end
         end
     end
-
-    % methods 
-    %     function bakeDSDs(obj)
-    %         % function that calculates the DSD at the top of the rainshaft for many combinations of Zhh, Zdr, Dm
-    %         % and saves them in a LUT. These can then be used later to interpolate the DSD at the top of the rainshaft for quick access.
-
-    %         obj.ex = exmiras;
-
-    %         NtopLUT = struct(...
-    %             'S', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250), ...
-    %             'C', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250), ...
-    %             'X', NaN(numel(obj.ZhhGrid), numel(obj.ZdrGrid), numel(obj.DmGrid), 250) ...
-    %         );
-    %         progress = 0;
-    %         total = numel(obj.ZhhGrid) * numel(obj.ZdrGrid) * numel(obj.DmGrid);
-    %         for bandName = ["S", "C", "X"]             
-    %             for Zhh = obj.ZhhGrid
-    %                 for Dm = obj.DmGrid
-    %                     for Zdr = obj.ZdrGrid
-    %                         obj.ex = exmiras;
-
-    %                         if mod(progress/total*100, 10) == 0
-    %                             fprintf('Progress: %d/%d\n', progress, total)
-    %                         end
-            
-    %                         % Run the ideal simulation                  
-    %                         %%! set up initial droplet size distribution
-    %                         % fprintf('T0m = %1.2f, humidity = %1.2f, dBZStart = %d, zdr = %1.2f\n', T0m, humidity, dBZStart, zdr)
-    %                         obj.ex.rngToggle = false;
-    %                         %% set up initial droplet size distribution
-    %                         obj.ex.xgrid = [50];
-    %                         obj.ex.ygrid = [50];
-    %                         obj.ex.zgrid = 25:50:2025;
-
-    %                         sx = numel(obj.ex.xgrid);
-    %                         sy = numel(obj.ex.ygrid);
-    %                         sz = numel(obj.ex.zgrid);
-    %                         Zhhi = Zhh + zeros(sx, sy, sz)*0;
-    %                         Zdri = Zdr + rand(sx, sy, sz)*0;
-    %                         Zhhi(:,:,1:size(Zhhi,3)-1) = -inf;
-    %                         Zdri(:,:,1:size(Zhhi,3)-1) = 0;
-
-    %                         obj.ex = obj.ex.initFromLambdaName(bandName);
-    %                         obj.ex = obj.ex.initFromDm(Zhhi(end), Zdri(end), Dm);
-                            
-    %                         NtopLUT.(bandName)(...
-    %                             obj.ZhhGrid ==Zhh, ...
-    %                             obj.ZdrGrid == Zdr, ...
-    %                             obj.DmGrid == Dm, ...
-    %                             : ...
-    %                         ) = squeeze(obj.ex.N(1,1,end,:));
-
-    %                         progress = progress + 1;
-    %                     end
-    %                 end
-    %             end
-    %         end
-
-    %         ZhhGrid = obj.ZhhGrid;
-    %         ZdrGrid = obj.ZdrGrid;
-    %         DmGrid = obj.DmGrid;
-    %         save('../data/LUTs/NtopLUTs.mat', 'NtopLUT', 'ZhhGrid', 'ZdrGrid', 'DmGrid')
-
-    %     end
-    % end
 
     %% data assimilation methods
     methods

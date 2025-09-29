@@ -45,7 +45,7 @@ From this point forward, `exmiras` or `ex` refers to the `exmiras.m` class, whil
 
     
 
-    #### [`radar`](/docs/radar.md) subroutines and properties
+    #### [`radar`](./radar.md) subroutines and properties
     These properties store the radar simulations or the radar settings. They are calculated by calling the [`radar`](/docs/radar.md)
     To use these properties, you must first initialize the [`radar`](/docs/radar.md) class hook by calling `ex = ex.initializeRadarSimulator(bandName)`. The [`radar`](/docs/radar.md) subroutines can be accessed by calling `ex.ra.subroutineName()`.
     - `ex.lambda = 111 % mm`: The wavelength for the radar simulation. Do not change this property directly; use `ex.initializeRadarSimulator(bandName)` instead, since that will update the `ex.ra` and `ex.da` classes.
@@ -62,8 +62,8 @@ From this point forward, `exmiras` or `ex` refers to the `exmiras.m` class, whil
     Please see [`radar`](/docs/radar.md) for more information.
 
 
-    #### droplet size distribution and [`dsdAssimilation`](/docs/dsdAssimilation.md) subroutines and properties
-    These properties control the drop size distribution (DSD) for the simulation. They are updated after each call to `ex.integrate()`, but there are cases where they need to be changed (e.g., [real cases](/scripts/rhiToEXMIRASTIMREXSpol.m)).
+    #### droplet size distribution and [`dsdAssimilation`](./dsdAssimilation.md) subroutines and properties
+    These properties control the drop size distribution (DSD) for the simulation. They are updated after each call to `ex.integrate()`, but there are cases where they need to be changed (e.g., [real cases](../scripts/rhiToEXMIRASTIMREXSpol.m)).
     
     - **`ex.N % m^-3 mm^-1, [sx, sy, sz, nbins], required`**: The number concentration for the simulation. This is the number of droplets per cubic meter per millimeter of diameter.
     - **`ex.N0 % m^-3 mm^-1, [sx, sy, sz, nbins], required`**: the dsd from the previous time step. This is used to calculate several rates of change in the simulation.

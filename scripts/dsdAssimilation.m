@@ -353,7 +353,7 @@ classdef dsdAssimilation < handle
         end
 
         %% estimate the N0, mu, and lambda from a given N using curve fitting.
-        function[N0,mu,lambda] = getN0MuLambdaFromN(obj, N)
+        function [N0,mu,lambda] = getN0MuLambdaFromN(obj, N)
             % in: N in m^-3 mm^-1
             % out: N0 in m^-3 mm^-1, mu, and lambda in mm^-1 
 
@@ -447,7 +447,7 @@ classdef dsdAssimilation < handle
 
     %% data assimilation methods
     methods
-        function varargout=profileOptimizer(obj, ZhhProfileObs, ZdrProfileObs)
+        function varargout=profileOptimizer(obj, ZhhProfileObs, ZdrProfileObs, varargin)
             % function that optimizes a profile of simulated Zhh and Zdr to find the best fitting DSD.
             % inputs: ZhhProfileObs, ZdrProfileObs: observed profiles of Zhh and Zdr to fit
             % outputs: N0, mu, lambda: optimized values of N0, mu, and lambda
@@ -456,7 +456,13 @@ classdef dsdAssimilation < handle
 
             options = optimset();
             options.TolX = 1e-1;
-            options.TolFun = 1e1;
+            options.TolFun = 0.5;
+
+            %% parse optional inputs
+            p = inputParser;
+            addParameter(p, 'KdpProfileObs', [], @(x) isnumeric(x) || islogical(x));
+            parse(p, varargin{:});
+            KdpProfileObs = p.Results.KdpProfileObs;
         
             %% run the assimilation optimization routine
             % initial guess: median of the observed profiles, and 0.7 mm for D
@@ -526,7 +532,9 @@ classdef dsdAssimilation < handle
                 
                 
                 % function to optimize the profile of the DSD
-                [~, Zhhp, Zdrp] = obj.estimateSingleRadarProfile(N0, mu, lambda);
+                [~, Zhhp, Zdrp,Kdpp] = obj.estimateSingleRadarProfile(N0, mu, lambda);
+                
+                % solve for Zvv from Zhh and Zdr
                 Zvvp = Zhhp - Zdrp;
                 
                 % convert to linear units
@@ -537,13 +545,24 @@ classdef dsdAssimilation < handle
                 %% calculate the error between the observed and simulated profiles
                 % Zhh
                 errorRawZhh = (Zhhp(:) - ZhhProfileObsLinear);
-                errorZhh = rms(mean(errorRawZhh, 'all', 'omitnan'), "omitmissing");
+                errorZhh = rms(mean(errorRawZhh, 'all', 'omitnan'), "omitmissing");%./std(ZhhProfileObsLinear(:), "omitmissing");
                 
                 %Zdr
                 errorRawZvv = (Zvvp(:) - 10.^((ZhhProfileObs - ZdrProfileObs)./10));
-                errorZvv = rms(mean(errorRawZvv, 'all', 'omitnan'), "omitmissing");
+                errorZvv = rms(mean(errorRawZvv, 'all', 'omitnan'), "omitmissing");%./std(Zvvp(:), "omitmissing");
 
-                errorReturn = (mean([errorZhh, (errorZvv)], "all","omitnan")); % + errorModeZdr.^2;
+                % Kdp
+                
+                if ~isempty(KdpProfileObs)
+                    % keyboard
+                    KdpProfileObsLinear = (KdpProfileObs);
+                    errorRawKdp = (Kdpp(:) - KdpProfileObsLinear);
+                    errorKdp = rms(mean(errorRawKdp, 'all', 'omitnan'), "omitmissing")./0.05;
+                else
+                    errorKdp = 0;
+                end
+
+                errorReturn = (mean([errorZhh, errorZvv, errorKdp], "all","omitnan")); % + errorModeZdr.^2;
 
                 % penalize solutions that are outside the physical bounds of the forward model
                 polytop = [2.3277, -0.9189];

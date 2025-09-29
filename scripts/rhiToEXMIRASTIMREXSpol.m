@@ -53,6 +53,7 @@
     rayNGates = ncread(fullfile(files(ii).folder,files(ii).name), 'ray_n_gates');
 
     VRt = ncread(fullfile(files(ii).folder,files(ii).name), 'VR');
+    Kdpt = ncread(fullfile(files(ii).folder,files(ii).name), 'NKDP');
     range = ncread(fullfile(files(ii).folder,files(ii).name), 'range');
     azimuth = ncread(fullfile(files(ii).folder,files(ii).name), 'azimuth');
     unique(azimuth)
@@ -64,10 +65,13 @@
     Zhh = NaN(max(rayNGates), numel(rayNGates));
     Zdr = NaN(max(rayNGates), numel(rayNGates));
     VR = NaN(max(rayNGates), numel(rayNGates));
+    Kdp = NaN(max(rayNGates), numel(rayNGates));
+
     for jj = 1:numel(rayNGates)
         Zhh(1:rayNGates(jj),jj) = Zhht(rayStartIndex(jj)+1:rayStartIndex(jj)+rayNGates(jj));
         Zdr(1:rayNGates(jj),jj) = Zdrt(rayStartIndex(jj)+1:rayStartIndex(jj)+rayNGates(jj));
         VR(1:rayNGates(jj),jj) = VRt(rayStartIndex(jj)+1:rayStartIndex(jj)+rayNGates(jj));
+        Kdp(1:rayNGates(jj),jj) = Kdpt(rayStartIndex(jj)+1:rayStartIndex(jj)+rayNGates(jj));
     end
 
 %% get datetime and relative humidity profile
@@ -89,6 +93,7 @@
     Zhhm = Zhh(:,mask);
     Zdrm = Zdr(:,mask);
     VRm = VR(:,mask);
+    Kdpm = Kdp(:,mask);
 
 %% plot the RHI observations
     meanVel = mean(VRm(Zhhm>30 & VRm>-26.7));
@@ -101,7 +106,7 @@
     xticklabels(round((0:1000:6000)*meanVel))
     shading flat
     ylim([0,2500])
-    xlim([-0, 6500])
+    xlim([-0, 4500])
     print2(gcf, '/h/eol/nbarron/figures/publications/exmiras/TIMREX_Obs_Zhh.pdf')
     figure('units','inches','position',[0,0,6.05,1.5])
     
@@ -111,7 +116,7 @@
     shading flat
     ylim([0,2500])
 
-    xlim([-0, 6500])
+    xlim([-0, 4500])
     xticks(0:1000:6000)
     xticklabels(round((0:1000:6000)*meanVel))
     print2(gcf, '/h/eol/nbarron/figures/publications/exmiras/TIMREX_Obs_Zdr.pdf')
@@ -120,39 +125,48 @@
     setMeteoColormap(gca, 'RadialVelocity')
     shading flat
     ylim([0,2500])
-    xlim([-0, 6500])
+    xlim([-0, 4500])
     print2(gcf, '/h/eol/nbarron/figures/publications/exmiras/TIMREX_Obs_VR.pdf')
 
+    pcolor(xmesh./meanVel, ymesh, Kdpm)
+    setMeteoColormap(gca, 'Kdp')
+    shading flat
+    ylim([0,2500])
+    xlim([-0, 4500])
+    xticks(0:1000:6000)
+    xticklabels(round((0:1000:6000)*meanVel))
+    print2(gcf, '/h/eol/nbarron/figures/publications/exmiras/TIMREX_Obs_Kdp.pdf')
+
 %% load and plot SUR obs.
-    % folder = "/h/eol/nbarron/work/timrex/spol/20080614/";
-    % filename = "cfrad.20080614_083002.000_to_20080614_083138.000_SPOLRVP8_v25_SUR.nc";
-    % filename = "cfrad.20080614_091644.000_to_20080614_091820.000_SPOLRVP8_v45_SUR.nc";
-    % filename = "cfrad.20080614_110733.000_to_20080614_111447.000_SPOLRVP8_v62_SUR.nc";
+%{
+    folder = "/h/eol/nbarron/work/timrex/spol/20080614/";
+    filename = "cfrad.20080614_083002.000_to_20080614_083138.000_SPOLRVP8_v25_SUR.nc";
+    
 
-    % azimuths = ncread(fullfile(folder,filename), 'azimuth');
-    % elevations = ncread(fullfile(folder,filename), 'elevation');
-    % ranges = ncread(fullfile(folder,filename), 'range');
-    % rayStartIndex = ncread(fullfile(folder,filename), 'ray_start_index');
-    % rayStartRange = ncread(fullfile(folder,filename), 'ray_start_range');
-    % rayNGates = ncread(fullfile(folder,filename), 'ray_n_gates');
+    azimuths = ncread(fullfile(folder,filename), 'azimuth');
+    elevations = ncread(fullfile(folder,filename), 'elevation');
+    ranges = ncread(fullfile(folder,filename), 'range');
+    rayStartIndex = ncread(fullfile(folder,filename), 'ray_start_index');
+    rayStartRange = ncread(fullfile(folder,filename), 'ray_start_range');
+    rayNGates = ncread(fullfile(folder,filename), 'ray_n_gates');
 
-    % ZhhFlat = ncread(fullfile(folder,filename), 'DBZ');
+    ZhhFlat = ncread(fullfile(folder,filename), 'DBZ');
 
-    % clear ZhhSur rangeSur azimuthSur elevationSur
-    % for jj = 1:numel(rayNGates)
-    %     ZhhSur(1:rayNGates(jj),jj) = ZhhFlat(rayStartIndex(jj)+1:rayStartIndex(jj)+rayNGates(jj));
-    %     rangeSur(1:rayNGates(jj),jj) = range(1:rayNGates(jj));
-    %     azimuthSur(1:rayNGates(jj),jj) = azimuths(jj);
-    %     elevationSur(1:rayNGates(jj),jj) = elevations(jj);
-    % end
+    clear ZhhSur rangeSur azimuthSur elevationSur
+    for jj = 1:numel(rayNGates)
+        ZhhSur(1:rayNGates(jj),jj) = ZhhFlat(rayStartIndex(jj)+1:rayStartIndex(jj)+rayNGates(jj));
+        rangeSur(1:rayNGates(jj),jj) = range(1:rayNGates(jj));
+        azimuthSur(1:rayNGates(jj),jj) = azimuths(jj);
+        elevationSur(1:rayNGates(jj),jj) = elevations(jj);
+    end
 
-    % mask = abs(wrapTo360(azimuthSur)-315)<45 & rangeSur<50000;
-    % [x,y,z] = sph2cart(azimuthSur(mask),elevationSur(mask),rangeSur(mask));
-    % x = double(x);
-    % y = double(y);
-    % z = double(z);
+    mask = abs(wrapTo360(azimuthSur)-315)<45 & rangeSur<50000;
+    [x,y,z] = sph2cart(azimuthSur(mask),elevationSur(mask),rangeSur(mask));
+    x = double(x);
+    y = double(y);
+    z = double(z);
 
-    % SI = scatteredInterpolant(x(:), y(:), z(:), reshape(10.^(ZhhSur(mask)/10), [], 1),'linear');
+    SI = scatteredInterpolant(x(:), y(:), z(:), reshape(10.^(ZhhSur(mask)/10), [], 1),'linear');
 
     % directionOfLine = 110
     % xmesh2 = cosd(directionOfLine)*(5000:500:60000) + reshape((-20000:1000:20000).*abs(sind(directionOfLine)),[],1);
@@ -165,34 +179,49 @@
 
     % gridded=10*log10(SI(xmesh3, ymesh3, zmesh3));
 
-    % figure("Units","inches","Position",[0,0,6,6])
-    % hold on
+    figure("Units","inches","Position",[0,0,6,6])
+    hold on
 
 
 
-    % mask = abs(elevations - 1.08)<0.1;
-    % [azmesh, rangemesh] = meshgrid(azimuths(mask), ranges);
+    mask = abs(elevations - 1.08)<0.1;
+    [azmesh, rangemesh] = meshgrid(azimuths(mask), ranges);
 
-    % xmesh = rangemesh.*sind(azmesh);
-    % ymesh = rangemesh.*cosd(azmesh);
-    % % zmesh = rangemesh.*tand(elevations(mask));
-    % Zhhm = ZhhSur(:,mask);
-    % % Zhhm(mask2,:) = NaN;
-    % % Zhhm(Zhhm<0) = NaN;
+    xmesh = rangemesh.*sind(azmesh);
+    ymesh = rangemesh.*cosd(azmesh);
+    % zmesh = rangemesh.*tand(elevations(mask));
+    Zhhm = ZhhSur(:,mask);
+    % Zhhm(mask2,:) = NaN;
+    % Zhhm(Zhhm<0) = NaN;
 
 
-    % % figure("Units","inches","Position",[0,0,2.9,3])
-    % % plotEarth(gca,'k')
-    % % hold on
-    % pcolor(xmesh, ymesh, Zhhm)
-    % shading flat
+    Zhhm(Zhhm<10) = NaN;
+    figure("Units","inches","Position",[0,0,2.9,3])
+    plotEarth(gca)
+    hold on
+    pcolor(xmesh/111000 + 120.434, ymesh/111000 + 22.527, Zhhm)
+    shading flat
+    xlim([min(xmesh/111000 + 120.434, [], 'all'), max(xmesh/111000 + 120.434, [], 'all')])
+    ylim([min(ymesh/111000 +  22.527, [], 'all'), max(ymesh/111000 +  22.527, [], 'all')])
+    yticks(21:0.5:24)
+    xticks(119:0.5:122)
+    yticklabels(string(yticks)+"^\circ N")
+    xticklabels(string(xticks)+"^\circ E")
+    x = cosd(0:360)
+    y = sind(0:360)
+    for rr = 50:50:150
+        plot(x*rr/111 + 120.434, y*rr/111 + 22.527, 'k')
+    end
+    setMeteoColormap(gca, 'Zhh')
+    daspect([1,1,1])
+    print2(gcf, '/h/eol/nbarron/figures/publications/exmiras/TIMREX_Obs_SUR_Zhh.pdf')
+    print2
     
 
     % pcolor(xmesh2(:,:,1), ymesh2(:,:,1), gridded(:,:,41))
-    % setMeteoColormap(gca, 'Zhh')
-    % shading flat
-    % axis equal
-    % print2
+    shading flat
+    axis equal
+    print2
 
 
     % % mask = abs(elevations - 1.08)<0.1 & abs(azimuths - 315)<45;
@@ -207,34 +236,38 @@
     % axis equal
     % print2
     
-    % % print2(gcf, '/h/eol/nbarron/figures/publications/exmiras/TIMREX_Obs_SUR_Zhh.pdf')
-
+%}
 
 
 %% interpolants/interpolate for the reflectivity and velocity fields
     Zhhsi = scatteredInterpolant(double(xmesh(:)), double(ymesh(:)), 10.^(double(Zhhm(:))./10), 'linear');
     Zdrsi = scatteredInterpolant(double(xmesh(:)), double(ymesh(:)), double(Zdrm(:)), 'linear');
     vrsi = scatteredInterpolant(double(xmesh(:)), double(ymesh(:)), double(VRm(:)), 'linear');
+    Kdpsi = scatteredInterpolant(double(xmesh(:)), double(ymesh(:)), double(Kdpm(:)), 'linear');
 
     % interpolate to the model grid
     ZhhProfile = (10*log10(Zhhsi(rzmesh, zrmesh)));
     ZdrProfile = Zdrsi(rzmesh, zrmesh);
     vrProfile = vrsi(rzmesh, zrmesh);
+    KdpProfile = Kdpsi(rzmesh, zrmesh);
 
     indMax = find(xGrid./meanVel > 4600+3600, 1,"first");
 
     ZhhProfile = ZhhProfile(1:indMax,:);
     ZdrProfile = ZdrProfile(1:indMax,:);
     vrProfile = vrProfile(1:indMax,:);
+    KdpProfile = KdpProfile(1:indMax,:);
 
     mask =  ZdrProfile < -1 | ZhhProfile < 10;
 
     ZhhProfile(mask) = NaN;
     ZdrProfile(mask) = NaN;
     vrProfile(mask) = NaN;
+    KdpProfile(mask) = NaN;
 
     ZhhProfile(:,zGrid<1000) = NaN;
     ZdrProfile(:,zGrid<1000) = NaN;
+    vrProfile(:,zGrid<1000) = NaN;
 %% perform the DSD assimilation
     mu = [];
     lambda = [];
@@ -248,27 +281,52 @@
     figure
     hold on
     N = NaN(indMax-2, 41,250);
-    for jj = 1:indMax-2
+    parfor jj = 120:indMax-2
         % jj = 50
         jj
         indToTest = max(inds(jj)-1,1): min(inds(jj)+1, size(ZhhProfile,1)-2);
         
         [N0Temp, muTemp, lambdaTemp,fv,NTemp]=de.profileOptimizer(...
             ZhhProfile(indToTest,:)', ... 
-            ZdrProfile(indToTest,:)' ...
+            ZdrProfile(indToTest,:)', ...
+            'KdpProfileObs',KdpProfile(indToTest,:)' ...
         );
-        % subplot(1,2,1)
+        %% no Kdp method
+        % [N0Temp]
+        % [muTemp, lambdaTemp]
+        % [N0Temp, muTemp, lambdaTemp,fv,NTemp]=de.profileOptimizer(...
+        %     ZhhProfile(indToTest,:)', ... 
+        %     ZdrProfile(indToTest,:)' ...
+        %      ...
+        % );
+        % [N0Temp]
+        % [muTemp, lambdaTemp]
+        
+    
+        % subplot(1,3,1)
         % hold off
         % plot(ZhhProfile(indToTest,:)', zGrid)
         % hold on
         % [~, Zhhp, Zdrp] = de.estimateSingleRadarProfile(N0Temp, muTemp, lambdaTemp);
         % plot(Zhhp', zGrid)
-        % subplot(1,2,2)
+        % subplot(1,3,2)
         % hold off
         % plot(ZdrProfile(indToTest,:)', zGrid)
         % hold on
         % plot(Zdrp', zGrid)
+        % subplot(1,3,3)
+        % hold off
+        % plot(KdpProfile(indToTest,:)', zGrid)
+        % hold on
+        % [~,~, ~, Kdpp] = de.estimateSingleRadarProfile(N0Temp, muTemp, lambdaTemp);
+        % plot(Kdpp', zGrid)
         % print2
+
+        % figure
+        % hold on
+        % plot(de.D, squeeze(NTemp(end,:))')
+        % print2
+
         % input('press enter to continue')
         if numel(NTemp) == 1
             NTemp = NaN(41,250);
@@ -286,7 +344,7 @@
     end
 
     figure
-    scatter(lambda(N0>1e3), mu(N0>1e3))
+    scatter(lambda(N0>1e5), mu(N0>1e5))
     hold on
     lambdai = linspace(0,20,100);
     mui = -0.016*lambdai.^2 + 1.213*lambdai - 1.957;% initial guess for mu
@@ -415,19 +473,21 @@
     end
     Zdr = dBZhh - dBZvv;
 
-    save('./TIMREX-SPOL-EXMIRAS3.mat', 'T', 'p', 'qv', 'pv', 'dBZhh', 'dBZvv', 'Zdr', 'RR', 'rhohv', 'kdp', 'ex');
+    save('./TIMREX-SPOL-EXMIRAS-withKdp.mat', 'T', 'p', 'qv', 'pv', 'dBZhh', 'dBZvv', 'Zdr', 'RR', 'rhohv', 'kdp', 'ex');
+
+    load('./TIMREX-SPOL-EXMIRAS-withKdp.mat')
     
 
 
     %% Make plots of the results
     % load(sprintf('./SL-%d_%d.mat', levelOfAOSPRE,scanID), 'T', 'p', 'qv', 'pv', 'dBZhh', 'dBZvv', 'Zdr', 'RR', 'rhohv', 'kdp', 'ex');
-    [TT, ZT] = meshgrid((1:numSteps)*ex.dt, ex.zgrid);
+    % [TT, ZT] = meshgrid((1:numSteps)*ex.dt, ex.zgrid);
 
     [~,dTdt]=gradient(T, ex.dt);
     dTdt = movmean(dTdt*3600,10*60,1);
 
-    TT = TT';
-    ZT = ZT';
+    % TT = TT';
+    % ZT = ZT';
 
     variablesToPlot = {dTdt, qv*100, dBZhh, Zdr, RR, rhohv, kdp};
     titles = {'dTdt', 'RH', 'Zhh', 'Zdr', 'RainRate', 'CC', 'Kdp'};

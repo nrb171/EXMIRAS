@@ -1,8 +1,11 @@
 %% this script prepares the rhi data for EXMIRAS run, and runs the model
 % specifically for the TIMREX-SPOL on 20080614, 
+% the data has been provided in the test folder, but since this is still a work in progress, 
+% I've commented out the paths to it. You will need to uncomment the paths on L7, L23, and L51 if using the test data
 
 %% Prepare rhi data for EXMIRAS run
     d = "/h/eol/nbarron/work/timrex/spol/20080614/";
+    % d = "../test/TiMREX/" % if using the test files
     files = dir(d+"*RHI*");
 
     zGrid = 25:50:2025;
@@ -17,6 +20,7 @@
 
 %% get sounding data
     soundingName = "/h/eol/nbarron/work/timrex/upper-air/spol.200806140600.txt";
+    % soundingName = "../test/TiMREX/spol.200806140600.txt" % if using the test files
     ua = readmatrix(soundingName, 'NumHeaderLines', 1, 'FileType', 'text');
     p = ua(:,1); % hPa
     T = ua(:,3); % C
@@ -44,7 +48,7 @@
     
 %% load necessary rhi data
     ii=3
-    % ii=9
+    % ii=1 % if using the test files
 
     nci = ncinfo(fullfile(files(ii).folder,files(ii).name));
     time = ncread(fullfile(files(ii).folder,files(ii).name), 'time');

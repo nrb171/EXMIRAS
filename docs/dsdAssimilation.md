@@ -21,29 +21,29 @@ The properties are grouped into several categories:
 - `da.estimateSingleRadarProfile(N0,mu, lambda)`: given a DSD described by the parameters N0, mu, and lambda, estimate the radar reflectivity and differential reflectivity profiles using the forward model LUTs. This takes into account the relative humidity profile.
 
     Usage:
-    - [dNp] = da.estimateSingleRadarProfile(N0,mu, lambda): returns the drop size distribution profile (mm^-1 m^-3)
-    - [_,Zhhp] = da.estimateSingleRadarProfile(N0,mu, lambda): returns dNp and the horizontal reflectivity profile (dBZ)
-    - [_,_,Zdrp] = da.estimateSingleRadarProfile(N0,mu, lambda): returns dNp, Zhhp, and the differential reflectivity profile (dB)
-    - [_,_,_,Kdp] = da.estimateSingleRadarProfile(N0,mu, lambda): returns dNp, Zhhp, Zdrp, and the specific differential phase profile (deg/km)
+    - `[dNp] = da.estimateSingleRadarProfile(N0,mu, lambda)`: returns the drop size distribution profile (mm^-1 m^-3)
+    - `[_,Zhhp] = da.estimateSingleRadarProfile(N0,mu, lambda)`: returns dNp and the horizontal reflectivity profile (dBZ)
+    - `[_,_,Zdrp] = da.estimateSingleRadarProfile(N0,mu, lambda)`: returns dNp, Zhhp, and the differential reflectivity profile (dB)
+    - `[_,_,_,Kdp] = da.estimateSingleRadarProfile(N0,mu, lambda)`: returns dNp, Zhhp, Zdrp, and the specific differential phase profile (deg/km)
 
 - `da.profileOptimizer(ZhhProfileObs, ZdrProfileObs)`: Given observed radar reflectivity and differential reflectivity profiles, find the DSD parameters (N0, mu, lambda) at the top of `da.zgrid` that best fit the observations using the dsd forward model LUTs linearization method. `ZhhProfileObs` and `ZdrProfileObs` should be interpolated to `da.zgrid`. This method uses a cost function that minimizes the difference between observed and simulated radar variables.
 
     Usage: 
-    - [N0opt, muopt, lambdaopt] = da.profileOptimizer(ZhhProfileObs, ZdrProfileObs): returns the optimized DSD parameters.
-    - [N0opt, muopt, lambdaopt, fv] = da.profileOptimizer(...): also returns the value of the cost function at the optimum.
-    - [N0opt, muopt, lambdaopt, fv, dNopt] = da.profileOptimizer(...): also returns the optimized drop size distribution profile (mm^-1 m^-3).
-    - [...] = da.profileOptimizer(..., 'KdpProfileObs', KdpProfileObs): also uses observed specific differential phase profile (deg/km) in the cost function. This has mixed success in improving the optimization results.
+    - `[N0opt, muopt, lambdaopt] = da.profileOptimizer(ZhhProfileObs, ZdrProfileObs)`: returns the optimized DSD parameters.
+    - `[N0opt, muopt, lambdaopt, fv] = da.profileOptimizer(...)`: also returns the value of the cost function at the optimum.
+    - `[N0opt, muopt, lambdaopt, fv, dNopt] = da.profileOptimizer(...)`: also returns the optimized drop size distribution profile (mm^-1 m^-3).
+    - `[...] = da.profileOptimizer(..., 'KdpProfileObs', KdpProfileObs)`: also uses observed specific differential phase profile (deg/km) in the cost function. This has mixed success in improving the optimization results.
 
    Usage:
-    - [N0opt, muopt, lambdaopt] = da.profileOptimizer(ZhhProfileObs, ZdrProfileObs, N0guess, muguess, lambdaguess): returns the optimized DSD parameters.
-    - [N0opt, muopt, lambdaopt, dNopt] = da.profileOptimizer(...): also returns the optimized drop size distribution profile (mm^-1 m^-3).
+    - `[N0opt, muopt, lambdaopt] = da.profileOptimizer(ZhhProfileObs, ZdrProfileObs, N0guess, muguess, lambdaguess)`: returns the optimized DSD parameters.
+    - `[N0opt, muopt, lambdaopt, dNopt] = da.profileOptimizer(...)`: also returns the optimized drop size distribution profile (mm^-1 m^-3).
 
 - `da.pointOptimizer(ZhhPointObs, ZdrPointObs)`: Given observed radar reflectivity and differential reflectivity at a single height, find the DSD parameters (N0, mu, lambda) that best fit the observations. This does not use the forward model LUTs linearization method, and is closer to the methodology discussed in Zhang et al. (2001).
     Zhang, G., J. Vivekanandan, and E. Brandes, 2001: A method for estimating rain rate and drop size distribution from polarimetric radar measurements. IEEE Trans. Geosci. Remote Sensing, 39, 830–841, https://doi.org/10.1109/36.917906.   
 
     Usage:
-    - [N] = da.pointOptimizer(ZhhPointObs, ZdrPointObs): returns the optimized DSD (a 1 x numel(D) array).
-    - [N, N0opt, muopt, lambdaopt] = da.pointOptimizer(...): also returns the optimized DSD parameters. 
+    - `[N] = da.pointOptimizer(ZhhPointObs, ZdrPointObs)`: returns the optimized DSD (a 1 x numel(D) array).
+    - `[N, N0opt, muopt, lambdaopt] = da.pointOptimizer(...)`: also returns the optimized DSD parameters. 
 
 ## Conversion between radar variables/DSD variables to DSD parameters
 - `[N,N0,mu,gamma]=da.getNFromZhhZdr(Zhh, Zdr)`: Given radar reflectivity (dBZ) and differential reflectivity (dB), return the DSD parameters (N0, mu, lambda) using the method of Zhang et al. (2001).

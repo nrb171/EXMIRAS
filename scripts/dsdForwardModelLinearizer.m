@@ -1,12 +1,11 @@
 
 %% generate simulations to linearize the DSD evolution
 % this script generates a series of idealized EXMIRAS simulations to
-% characterize the evolution of the DSD as a function of initial Dm, Zdr,
-% and RH. The reflectivity is solved in the forward model in `dsdAssimilation.m`
-
+% characterize the evolution of the DSD as a function of initial mu, lambda,
+% and Zhh. The reflectivity profiles are solved in the forward model from `dsdAssimilation.m`
 % To generate the simulations, run the following loop. 
+% To generate the LUTs from the results of the simulations, run the code from L47--L93.
 
-% To save the LUTs, run the code beginning at line 34.
 zgrid = 25:100:2025;
 lapseRate = -6.5; % K/km
 
